@@ -24,7 +24,7 @@ function renderExecution(){render();periodNotes();trendAlerts();exitPerformance(
 for(const id of ['manager','site','period'])$(id).addEventListener('change',executionStatus);
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',executionStatus));
 renderExecution();
-if(location.protocol==='https:'||location.protocol==='http:')setInterval(async()=>{
+async function refreshExecution(){
   try{
     const response=await fetch('execution.json?t='+Date.now(),{cache:'no-store'});
     if(!response.ok)throw Error('fetch');
@@ -35,4 +35,8 @@ if(location.protocol==='https:'||location.protocol==='http:')setInterval(async()
     executionStatus();
     if(!$('executionSyncStatus').hidden)$('executionSyncStatus').textContent+=' 网页获取同步结果失败，保留上次有效数据。';
   }
-},60000);
+}
+if(location.protocol==='https:'||location.protocol==='http:'){
+  refreshExecution();
+  setInterval(refreshExecution,60000);
+}
