@@ -1,0 +1,91 @@
+name: Execution sync and Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dashboard-pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check read authorization
+        id: credentials
+        env:
+          SA: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          OAUTH: ${{ secrets.GOOGLE_DRIVE_OAUTH_JSON }}
+        run: |
+          if [ -n "$SA" ] || [ -n "$OAUTH" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Google read authorization is missing; retaining last valid snapshot.'
+          fi
+      - uses: actions/setup-python@v5
+        if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-execution.txt
+      - name: Install read-only adapter dependencies
+        if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
+        run: python -m pip install -r requirements-execution.txt
+      - name: Isolated regression checks
+        if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
+        run: python -m unittest test_execution_sync -q
+      - uses: actions/cache/restore@v4
+        if: steps.credentials.outputs.ready == 'true'
+        with:
+          path: .execution-cache.enc
+          key: execution-drive-cache-${{ github.run_id }}
+          restore-keys: execution-drive-cache-
+      - name: Read changed execution workbooks only
+        if: steps.credentials.outputs.ready == 'true'
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_OAUTH_JSON: ${{ secrets.GOOGLE_DRIVE_OAUTH_JSON }}
+        run: python sync_execution.py
+      - uses: actions/cache/save@v4
+        if: steps.credentials.outputs.ready == 'true'
+        with:
+          path: .execution-cache.enc
+          key: execution-drive-cache-${{ github.run_id }}
+      - name: Commit execution snapshot only
+        if: steps.credentials.outputs.ready == 'true'
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add execution.json execution-data.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'Sync execution status from read-only Drive inputs'
+            git push origin HEAD:main
+          fi
+      - name: Package public static files only
+        if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
+        run: |
+          mkdir _site
+          cp .nojekyll index.html style.css app.js summary.json summary-data.js targets.json targets-data.js targets.js execution.json execution-data.js execution-sync.js _site/
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
+        with:
+          path: _site
+      - name: Deploy validated snapshot
+        id: deployment
+        if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
+        uses: actions/deploy-pages@v4
