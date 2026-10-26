@@ -54,3 +54,24 @@ footer>.basis-notes{max-width:75%;margin:0}
  .goal-person-head{flex-wrap:wrap}
  footer>.basis-notes{max-width:100%;margin-top:12px}
 }
+
+/* The guide occupies the spare side gutter; compact screens keep the full data width. */
+:root{--nav-height:64px;--guide-top:80px;--guide-offset:126px}
+#metrics,#departmentGoals,#personalGoals,#trendPanel,#cardsPanel,#alertsPanel{scroll-margin-top:var(--guide-offset)}
+#pageGuide{position:sticky;top:var(--nav-height);z-index:90;width:calc(100% - 64px);max-width:1320px;margin:12px auto 0;background:#f8fafc;border:1px solid var(--line);border-radius:8px;color:var(--ink)}
+#pageGuide summary{padding:10px 14px;font-size:12px;font-weight:600;color:#183e63;cursor:pointer}
+#guideCurrent{font-weight:400;color:var(--muted);margin-left:10px}
+.guide-title{display:none;font-size:13px;font-weight:700;color:#183e63;padding:14px 12px 10px}
+#guideLinks{display:flex;flex-direction:column;gap:4px;padding:6px 8px 10px;max-height:45vh;overflow-y:auto}
+#guideLinks a{display:block;padding:9px 10px;border-radius:5px;border-left:3px solid transparent;color:#60758b;font-size:12px;line-height:1.6;text-decoration:none;overflow-wrap:anywhere}
+#guideLinks a:hover{background:#eaf0f7;color:#183e63}
+#guideLinks a[aria-current="location"]{background:#e4edf7;border-left-color:#183e63;color:#183e63;font-weight:700}
+#guideLinks a:focus-visible,#pageGuide summary:focus-visible{outline:2px solid #2458ca;outline-offset:2px}
+@media(max-width:650px){#pageGuide{width:calc(100% - 40px);margin:10px auto 0}#guideCurrent{display:block;margin-left:14px;font-size:11px}}
+@media(min-width:1560px){
+ main{margin-left:max(196px,calc((100vw - 1384px)/2));margin-right:16px}
+ #pageGuide{position:fixed;top:var(--guide-top);left:max(16px,calc((100vw - 1384px)/2 - 180px));width:176px;margin:0;max-height:calc(100dvh - var(--guide-top) - 16px);overflow-y:auto}
+ #pageGuide summary{display:none}
+ .guide-title{display:block}
+ #guideLinks{max-height:none;padding-top:0}
+}

@@ -52,3 +52,58 @@ function renderModuleHeaders(gs,id){
  $('cardsDate').textContent=tab==='all'?financial:tab==='price'?snapshot+' · '+executionDate:snapshot;
  $('alertsDate').textContent=(tab==='all'?financial+' · '+snapshot+' · '+executionDate:tab==='price'?snapshot+' · '+executionDate:snapshot)+(gs.some(g=>g.stale||!g.report_verified)?' · 存在过期/未发布数据':'');
 }
+
+// In-page navigation only: no changes to data, filters or rendering calculations.
+(()=>{
+ const guide=$('pageGuide'),disclosure=$('guideDisclosure'),links=$('guideLinks');
+ const topbar=document.querySelector('.navigation-bar'),wide=matchMedia('(min-width:1560px)');
+ let entries=[],frame=0;
+ const offset=()=>topbar.getBoundingClientRect().height+(wide.matches?24:disclosure.querySelector('summary').getBoundingClientRect().height+24);
+ function highlight(){
+  frame=0;
+  const bar=topbar.getBoundingClientRect();
+  document.documentElement.style.setProperty('--guide-top',Math.max(bar.height,bar.bottom)+16+'px');
+  const line=offset()+24;
+  let current=entries[0];
+  for(const entry of entries)if($(entry.id).getBoundingClientRect().top<=line)current=entry;
+  if(scrollY>0&&innerHeight+scrollY>=document.documentElement.scrollHeight-2)current=entries[entries.length-1];
+  for(const a of links.querySelectorAll('a')){
+   if(a.hash==='#'+current?.id)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current');
+  }
+  $('guideCurrent').textContent=current?.label||'经营指标概览';
+ }
+ function schedule(){if(!frame)frame=requestAnimationFrame(highlight);}
+ function measure(){
+  document.documentElement.style.setProperty('--nav-height',topbar.getBoundingClientRect().height+'px');
+  document.documentElement.style.setProperty('--guide-offset',offset()+'px');
+  schedule();
+ }
+ function rebuild(){
+  const all=document.querySelector('.navigation-bar button.active')?.dataset.tab==='all';
+  entries=[{id:'metrics',label:'↑ 经营指标概览'},...(all?[
+   {id:'departmentGoals',label:'01 部门经营目标'},
+   {id:'personalGoals',label:'02 个人绩效目标'},
+   {id:'trendPanel',label:'03 近12周经营趋势'},
+   {id:'cardsPanel',label:'04 各负责人经营表现'},
+   {id:'alertsPanel',label:'05 经营异常与待介入事项'}
+  ]:[{id:'cardsPanel',label:$('cardsTitle').textContent.replace('｜',' ')},{id:'alertsPanel',label:$('alertsTitle').textContent.replace('｜',' ')}])];
+  links.innerHTML=entries.map(e=>`<a href="#${e.id}">${esc(e.label)}</a>`).join('');
+  guide.hidden=false;disclosure.open=wide.matches;measure();
+ }
+ links.addEventListener('click',event=>{
+  const a=event.target.closest('a');if(!a)return;
+  event.preventDefault();
+  if(!wide.matches)disclosure.open=false;
+  const target=$(a.hash.slice(1));
+  target.setAttribute('tabindex','-1');target.focus({preventScroll:true});
+  window.scrollTo({top:Math.max(0,scrollY+target.getBoundingClientRect().top-offset()),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+  schedule();
+ });
+ document.querySelectorAll('.navigation-bar button').forEach(b=>b.addEventListener('click',()=>requestAnimationFrame(rebuild)));
+ wide.addEventListener('change',()=>{disclosure.open=wide.matches;measure();});
+ disclosure.addEventListener('toggle',measure);
+ addEventListener('scroll',schedule,{passive:true});addEventListener('resize',measure,{passive:true});
+ new ResizeObserver(measure).observe(topbar);
+ new ResizeObserver(schedule).observe(document.querySelector('main'));
+ requestAnimationFrame(rebuild);
+})();
