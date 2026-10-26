@@ -87,6 +87,7 @@ def calculate(state,payload,baseline,config,now):
 
 
 def run(root,fetcher=fetch_inputs,now=None):
+    supplied_now=now
     now=now or datetime.now(TZ)
     state=json.loads((root/'execution.json').read_text(encoding='utf8'))
     config=json.loads((root/'execution_sources.json').read_text(encoding='utf8'))
@@ -95,8 +96,10 @@ def run(root,fetcher=fetch_inputs,now=None):
         if len(key)<48:raise ValueError('transport_not_configured')
         baseline=decode_baseline((root/'execution-queue-baseline.enc').read_bytes(),key)
         payload=fetcher(url,key)
+        now=supplied_now or datetime.now(TZ)
         updated=calculate(state,payload,baseline,config,now)
     except Exception as error:
+        now=supplied_now or datetime.now(TZ)
         # All-four atomic snapshot: unknown cross-group occupancy must not cause
         # partial new claims of readiness or comparable parent profit.
         updated=copy.deepcopy(state)

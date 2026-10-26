@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -47,6 +47,20 @@ class TransportTests(unittest.TestCase):
     def test_stale_payload_rejected(self):
         p=payload();p['read_at']='2026-10-20T00:00:00+08:00'
         with self.assertRaises(ValueError):transport.calculate({},p,{}, {'sources':[{}]},NOW)
+
+    def test_success_timestamp_is_after_source_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'execution.json').write_text('{"groups":{}}',encoding='utf8')
+            config={'sources':[{'manager':'李漉','file_id':'TEST-ID'}]}
+            (root/'execution_sources.json').write_text(json.dumps(config),encoding='utf8')
+            baseline={'李漉':{'queue':[],'asof':'2026-10-23'}}
+            (root/'execution-queue-baseline.enc').write_bytes(transport.encode_baseline(baseline,KEY))
+            with patch.dict(os.environ,APPS_SCRIPT_EXECUTION_URL='https://script.google.com/macros/s/TEST/exec',APPS_SCRIPT_SYNC_KEY=KEY),patch.object(transport,'datetime') as clock:
+                clock.now.side_effect=[NOW,NOW+timedelta(seconds=75)]
+                clock.fromisoformat.side_effect=datetime.fromisoformat
+                result=transport.run(root,lambda url,key:payload())
+            self.assertGreater(datetime.fromisoformat(result['last_success_at']),datetime.fromisoformat(result['data_asof']))
 
     def test_network_failure_retains_every_count_and_success_time(self):
         with tempfile.TemporaryDirectory() as folder:

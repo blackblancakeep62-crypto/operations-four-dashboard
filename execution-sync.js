@@ -7,10 +7,13 @@ op=function(g){
   return base&&patch?{...base,...patch}:base;
 };
 function executionStatus(){
+  const state=window.EXECUTION_DATA||{};
+  const hostingNote=Array.from($('foot').childNodes).find(n=>n.nodeType===Node.TEXT_NODE&&n.textContent===D.hosting);
+  if(hostingNote&&state.automation==='apps_script_daily')hostingNote.textContent='GitHub Pages公开只读快照；经营与目标沿用已有快照，提价执行每日自动同步';
   const box=$('executionSyncStatus');
   box.hidden=document.querySelector('nav button.active')?.dataset.tab!=='price';
   if(box.hidden)return;
-  const state=window.EXECUTION_DATA||{}, selected=groups();
+  const selected=groups();
   const fmt=v=>v?new Date(v).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚无成功同步';
   const authorization=String(state.automation||'').startsWith('awaiting_')||state.status==='authorization_required';
   const details=selected.map(g=>{const x=state.groups?.[g.manager],late=!authorization&&(!x?.last_success_at||Date.now()-Date.parse(x.last_success_at)>36*60*60000);return g.manager+'：数据截至 '+(x?.data_asof?fmt(x.data_asof):'待同步')+'，最近成功同步 '+fmt(x?.last_success_at)+(x?.status&&x.status!=='ok'?'（同步失败/待授权，保留上次有效值）':late?'（同步超时，保留上次有效值）':'');}).join('；');
