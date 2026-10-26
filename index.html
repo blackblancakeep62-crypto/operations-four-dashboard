@@ -2,7 +2,7 @@
 <header><div class="eyebrow">OPERATIONS / MANAGEMENT</div><div class="headline"><h1>运营四组经营驾驶舱</h1><span class="badge">公开 · 只读快照</span></div><p>经营监控、提价探索与库存退出。经营与目标沿用已生成快照；提价执行同步状态见「提价管理」，执行与复盘以各组报表为准。</p></header>
 <div class="navigation-bar"><nav><button class="active" data-tab="all">全部成员</button><button data-tab="price">提价管理</button><button data-tab="exit">淘汰管理</button></nav><section class="toolbar" aria-label="经营数据筛选"><label>负责人<select id="manager"><option value="all">全部负责人</option></select></label><label>站点<select id="site"><option value="all">全部站点</option></select></label><label>经营周期<select id="period"></select></label></section></div>
 <main><div id="freshness" aria-live="polite"></div>
-<div id="executionSyncStatus" class="notice" hidden aria-live="polite"></div>
+<div id="executionSyncStatus" class="notice execution-sync-status" hidden aria-live="polite"></div>
 <div id="notice" class="notice"></div><section id="metrics" class="metrics"></section>
 
 <section id="departmentGoals" class="panel"><div class="panelhead goal-header"><div><div class="goal-eyebrow">DAILY / TARGET PROGRESS</div><h2>运营四组整体目标进度</h2><p>目标固定为四组、全部站点；独立于上方经营周期与站点筛选。金额为人民币。</p></div><label>部门目标周期<select id="goalPeriod"><option value="2026-10">2026年10月</option><option value="2026-11">2026年11月</option><option value="2026-12">2026年12月</option><option value="2026-Q4">2026年Q4</option></select></label></div><div id="goalSyncStatus" class="goal-callout"></div><div id="departmentGoalStatus" class="goal-muted"></div><div id="departmentGoalBody"></div><details class="goal-config-notes"><summary>目标加总校验与配置差异（保留原值）</summary><ul id="goalWarnings"></ul></details></section>

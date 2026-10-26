@@ -13,7 +13,7 @@ function executionStatus(){
   const state=window.EXECUTION_DATA||{}, selected=groups();
   const fmt=v=>v?new Date(v).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚无成功同步';
   const authorization=String(state.automation||'').startsWith('awaiting_')||state.status==='authorization_required';
-  const details=selected.map(g=>{const x=state.groups?.[g.manager],late=!authorization&&(!x?.last_success_at||Date.now()-Date.parse(x.last_success_at)>36*60*60000);return g.manager+'：'+fmt(x?.last_success_at)+(x?.status&&x.status!=='ok'?'（同步失败/待授权，保留上次有效值）':late?'（同步超时，保留上次有效值）':'');}).join('；');
+  const details=selected.map(g=>{const x=state.groups?.[g.manager],late=!authorization&&(!x?.last_success_at||Date.now()-Date.parse(x.last_success_at)>36*60*60000);return g.manager+'：数据截至 '+(x?.data_asof?fmt(x.data_asof):'待同步')+'，最近成功同步 '+fmt(x?.last_success_at)+(x?.status&&x.status!=='ok'?'（同步失败/待授权，保留上次有效值）':late?'（同步超时，保留上次有效值）':'');}).join('；');
   const incomplete=selected.reduce((n,g)=>n+(state.groups?.[g.manager]?.operational?.incomplete_execution_records||0),0);
   box.textContent=(authorization?'执行表每日同步待 Apps Script 授权验证；当前保留上一有效快照。':'执行表每天北京时间10:30左右同步；网页每60秒读取同步结果。')+' '+details+'。'+(incomplete?' 有'+incomplete+'条记录缺实际启动证据，不计入实际测试。':'')+' 理论增量与已验证增量分开；已验证增量仍需对照、证据及FX/广告/促销/断货核验。';
 }
