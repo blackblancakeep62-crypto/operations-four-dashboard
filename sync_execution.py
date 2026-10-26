@@ -180,8 +180,8 @@ def run(root, offline_dir=None, offline_meta=None, now=None):
     path=root/'execution.json'
     previous=json.loads(path.read_text(encoding='utf8')) if path.exists() else {'groups':{}}
     state=copy.deepcopy(previous)
-    state.update(schema='execution-sync-v1',checked_at=now.isoformat(),interval_minutes=15,
-                 automation='awaiting_google_authorization' if offline_dir else 'github_actions',
+    state.update(schema='execution-sync-v1',checked_at=now.isoformat(),interval_minutes=1440,
+                 automation='awaiting_appscript_authorization' if offline_dir else 'github_actions',
                  basis='V4 actual-start / completion / comparable-parent gates; theoretical profit unchanged')
     state.setdefault('groups',{})
     cachepath=root/('.execution-cache.json' if offline_dir else '.execution-cache.enc')

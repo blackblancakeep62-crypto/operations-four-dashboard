@@ -2,11 +2,25 @@
   "sheet": "02｜提价执行与复盘",
   "queue_sheet": "01｜本周待提价清单",
   "header_row": 7,
-  "interval_minutes": 15,
+  "interval_minutes": 1440,
   "sources": [
-    {"manager":"李漉","file_id":"1_cFtlAw32LfrSLhZGb8u45JRXZ5QCjRd"},
-    {"manager":"陈梦怡","file_id":"1eQ8q10c8AFXS5WeQur0Am-iVDUHu6OOP"},
-    {"manager":"陈芳志","file_id":"1D_ecSV7gRw7LFA30nCnPyr7xzuJ_A5Z_"},
-    {"manager":"陈晞","file_id":"1TeLm-rAD8u5Tx9WKMt11QnHpVsFqtJQ0"}
-  ]
+    {
+      "manager": "李漉",
+      "file_id": "1_cFtlAw32LfrSLhZGb8u45JRXZ5QCjRd"
+    },
+    {
+      "manager": "陈梦怡",
+      "file_id": "1eQ8q10c8AFXS5WeQur0Am-iVDUHu6OOP"
+    },
+    {
+      "manager": "陈芳志",
+      "file_id": "1D_ecSV7gRw7LFA30nCnPyr7xzuJ_A5Z_"
+    },
+    {
+      "manager": "陈晞",
+      "file_id": "1TeLm-rAD8u5Tx9WKMt11QnHpVsFqtJQ0"
+    }
+  ],
+  "daily_time": "10:30",
+  "timezone": "Asia/Shanghai"
 }
