@@ -13,7 +13,14 @@ function op(g){return $('site').value==='all'?g.operational:g.site_operational?.
 function totals(gs,id){const rows=gs.map(g=>period(g,id));let x={};for(const f of ['orderProductSales','erp_orderProductSales','discountCostSales','unitsOrdered','salesNetProfit','adsSpend'])x[f]=sum(rows,f);x.asp=ratio(x.discountCostSales,x.unitsOrdered);x.margin=ratio(x.salesNetProfit,x.orderProductSales);x.ad_rate=ratio(x.adsSpend,x.erp_orderProductSales);return x}
 function options(){for(const g of D.groups)$('manager').add(new Option(g.manager,g.manager));const sites=[...new Set(D.groups.flatMap(g=>g.available_sites||[]))].sort();for(const s of sites)$('site').add(new Option(s,s));const ps=[...new Map(D.groups.flatMap(g=>(g.periods||[]).filter(p=>p.kind==='month'||(p.kind==='week'&&p.end>=g.weekly_cutoff.slice(0,4)+'-01-01'))).map(p=>[p.id,p])).values()].sort((a,b)=>b.end.localeCompare(a.end)||b.kind.localeCompare(a.kind));let weeks=ps.filter(p=>p.kind==='week').slice(0,12),months=ps.filter((p,i,a)=>p.kind==='month'&&a.findIndex(q=>q.kind==='month'&&q.start===p.start)===i).slice(0,6);for(const [title,list]of [['完整自然周',weeks],['月度（含明确标记的部分月）',months]]){const group=document.createElement('optgroup');group.label=title;for(const p of list){const end=new Date(p.end+'T12:00:00Z'),partial=p.kind==='month'&&new Date(end.getTime()+86400000).getUTCDate()!==1;const label=(p.kind==='week'?'周 ':'月 ')+p.start+' — '+p.end+(partial?' · 部分月':'');group.append(new Option(label,p.id))}$('period').append(group)}}
 function expectedWeeklyCutoff(now=new Date()){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now).map(x=>[x.type,x.value]));const d=new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7+1));return d.toISOString().slice(0,10)}
-function render(){for(const g of D.groups)if(g.report_verified)g.stale=Boolean(g.stale||g.weekly_cutoff<expectedWeeklyCutoff());const gs=groups(),id=$('period').value,m=totals(gs,id),ops=gs.map(op),p0=gs.flatMap(g=>g.periods||[]).find(p=>p.id===id);const pending=gs.reduce((s,g)=>s+((g.periods||[]).find(p=>p.id===id)?.joint_pending||0),0);const published=gs.filter(g=>g.report_verified).length;
+function render(){
+ const warningActive=tab==='warnings';
+ for(const id of ['metrics','cardsPanel','alertsPanel'])$(id).hidden=warningActive;
+ document.querySelector('footer').hidden=warningActive;
+ $('period').disabled=warningActive;
+ if(window.renderAlerts)window.renderAlerts();
+ if(warningActive){$('departmentGoals').hidden=$('personalGoals').hidden=true;$('trendPanel').style.display='none';return;}
+for(const g of D.groups)if(g.report_verified)g.stale=Boolean(g.stale||g.weekly_cutoff<expectedWeeklyCutoff());const gs=groups(),id=$('period').value,m=totals(gs,id),ops=gs.map(op),p0=gs.flatMap(g=>g.periods||[]).find(p=>p.id===id);const pending=gs.reduce((s,g)=>s+((g.periods||[]).find(p=>p.id===id)?.joint_pending||0),0);const published=gs.filter(g=>g.report_verified).length;
  $('freshness').innerHTML=`${published}/${gs.length}组报表已核验 · ${!published?'等待数据发布':gs.some(g=>g.stale)?'存在过期数据':'上一完整周'}<br>汇总生成 ${esc((D.generated_at||'').slice(0,19).replace('T',' '))} 北京时间`;
  $('notice').textContent=tab==='all'?`展示可明确归属的真实经营金额。${pending?'该周期仍有共管记录待分配，未计入下列金额。':'跨组汇总按同一实际周期计算。'} 部分月不与完整月直接比较。`:tab==='price'?'机会与执行状态为本次刷新快照；经营周期筛选不回溯重建历史分层。理论增量为模型情景，与已验证净毛利分开展示。':'按产品实际退出状态识别所有负责人；库存是ERP查询时快照。缺少确认的库存占用金额、清仓活动业绩与清理进度留空。';
  let html='';if(tab==='all'){const ps=gs.flatMap(g=>g.periods||[]).filter(p=>p.kind===p0?.kind&&p.end<p0.end).sort((a,b)=>b.end.localeCompare(a.end)),prev=ps[0]?.id,b=prev?totals(gs,prev):{};const partial=p0?.kind==='month'&&new Date(new Date(p0.end+'T12:00:00Z').getTime()+86400000).getUTCDate()!==1;const wow=partial?null:ratio(m.orderProductSales-b.orderProductSales,Math.abs(b.orderProductSales));html=metric('调整后销售额 · CNY',money(m.orderProductSales),(partial?'部分月，环比不比较':'销售额环比 '+pct(wow)))+metric('调整后净毛利 · CNY',money(m.salesNetProfit),'已包含广告及促销费用')+metric('调整后净毛利率',pct(m.margin),'合计净毛利 / 合计销售额')+metric('平均成交单价 · CNY',money(m.asp),'实际成交额 / 销量')+metric('广告费用率',pct(m.ad_rate),'广告 / ERP原始销售额')+metric('销量',num(m.unitsOrdered),'ERP真实子体销量');}
@@ -80,7 +87,8 @@ function renderModuleHeaders(gs,id){
  }
  function rebuild(){
   const all=document.querySelector('.navigation-bar button.active')?.dataset.tab==='all';
-  entries=[{id:'metrics',label:'↑ 经营指标概览'},...(all?[
+  const warnings=document.querySelector('.navigation-bar button.active')?.dataset.tab==='warnings';
+  entries=warnings?[{id:'warningOverview',label:'01 预警总览'},{id:'warningRisk',label:'02 异常处理清单'},{id:'warningGrowth',label:'03 红榜增长机会'},{id:'warningHistory',label:'04 历史状态变化'},{id:'warningAction',label:'05 人工动作复盘'}]:[{id:'metrics',label:'↑ 经营指标概览'},...(all?[
    {id:'departmentGoals',label:'01 部门经营目标'},
    {id:'personalGoals',label:'02 个人绩效目标'},
    {id:'trendPanel',label:'03 近12周经营趋势'},

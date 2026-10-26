@@ -17,10 +17,12 @@ from pathlib import Path
 MODULES = {
     'targets': ('targets.json', 'targets-data.js', 'window.OPERATIONS_TARGETS='),
     'execution': ('execution.json', 'execution-data.js', 'window.EXECUTION_DATA='),
+    'alerts': ('alerts.json', 'alerts-data.js', 'window.ALERTS_DATA='),
 }
 STATIC = ('.nojekyll','index.html','style.css','app.js','summary.json','summary-data.js',
           'targets.json','targets-data.js','targets.js','execution.json',
-          'execution-data.js','execution-sync.js','snapshot-guard.js')
+          'execution-data.js','execution-sync.js','snapshot-guard.js',
+          'alerts.json','alerts-data.js','alerts.js','alerts.css')
 LIVE = 'https://blackblancakeep62-crypto.github.io/operations-four-dashboard/'
 
 class PublicationError(ValueError):
@@ -37,6 +39,13 @@ def versions(module, data):
             for name, entry in people.items():
                 if entry.get('actual'):
                     result['personal/'+period+'/'+name] = entry['actual']
+    elif module == 'alerts':
+        if data.get('schema') != 'alerts-v1': raise PublicationError('invalid_alerts_schema')
+        if not all(isinstance(data.get(k),list) for k in ('parents','entries','history','actions')):
+            raise PublicationError('invalid_alerts_rows')
+        for key in ('business_cutoff','status_snapshot_date','last_success_at','checked_at'):
+            if not data.get(key):raise PublicationError('missing_alerts_date:'+key)
+        result['root'] = data
     else:
         if data.get('schema') != 'execution-sync-v1': raise PublicationError('invalid_execution_schema')
         result['root'] = data
@@ -48,6 +57,9 @@ def instant(value):
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 def assert_no_regression(module, candidate, previous, allow_rollback=False, reason=''):
+    if module == 'alerts' and previous is None:
+        versions(module,candidate)
+        return
     new, old = versions(module,candidate), versions(module,previous)
     if allow_rollback:
         if not reason.strip(): raise PublicationError('manual_rollback_reason_required')
@@ -61,6 +73,11 @@ def assert_no_regression(module, candidate, previous, allow_rollback=False, reas
             if not after.get('cutoff') or after['cutoff'] < before['cutoff']:
                 raise PublicationError('older_business_cutoff:'+scope)
             fields = ('refreshed_at',) if after['cutoff'] == before['cutoff'] else ()
+        elif module == 'alerts':
+            for key in ('business_cutoff','status_snapshot_date','latest_action_date'):
+                if before.get(key) and (not after.get(key) or after[key] < before[key]):
+                    raise PublicationError('older_alerts_date:'+key)
+            fields = ('data_asof','last_success_at','checked_at')
         else:
             fields = ('data_asof','last_success_at','checked_at')
         for field in fields:
@@ -130,8 +147,17 @@ def load_live(module):
     name = MODULES[module][0]
     request = urllib.request.Request(LIVE+name+'?publication_check='+uuid.uuid4().hex,
                                      headers={'Cache-Control':'no-cache'})
-    with urllib.request.urlopen(request,timeout=30) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(request,timeout=30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        if module != 'alerts' or error.code != 404:raise
+        # One-time onboarding only: the deployed manifest must prove this module
+        # has never been packaged. Other HTTP/network failures stay fail-closed.
+        with urllib.request.urlopen(LIVE+'publication.json?check='+uuid.uuid4().hex,timeout=30) as response:
+            manifest=json.load(response)
+        if 'alerts.json' in manifest.get('hashes',{}):raise
+        return None
 
 def prepare_site(repo, output, live_reader=load_live, allow_rollback=False, reason=''):
     git(repo,'fetch','origin','main')

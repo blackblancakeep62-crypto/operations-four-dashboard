@@ -52,7 +52,7 @@ jobs:
       - name: Isolated regression checks
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
         run: |
-          python -m unittest test_execution_sync test_apps_script_transport test_publication_guard -q
+          python -m unittest test_execution_sync test_apps_script_transport test_publication_guard test_alerts -q
           node test_snapshot_guard.cjs
       - name: Read four execution sheets through Apps Script
         if: github.event_name != 'push' && steps.credentials.outputs.ready == 'true'

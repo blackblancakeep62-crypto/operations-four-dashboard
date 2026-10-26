@@ -12,3 +12,10 @@ assert.throws(()=>guard.accept('execution',execution('2026-10-26T09:00:00+08:00'
 guard.accept('execution',execution('2026-10-26T12:00:00+08:00'));
 assert.equal(guard.accept('targets',target('2026-10-25')).departments['2026-10'].actual.cutoff,'2026-10-25');
 console.log('Browser freshness: forward/reverse module updates, stale response rejection and reload cache retention passed.');
+const alertSeed=JSON.parse(fs.readFileSync('alerts.json','utf8'));
+guard.restore('alerts',alertSeed);
+const older=structuredClone(alertSeed);older.status_snapshot_date='2000-01-01';older.last_success_at='2099-01-01T00:00:00Z';
+assert.throws(()=>guard.accept('alerts',older));
+assert.equal(guard.restore('execution',execution('2026-10-26T09:00:00+08:00')).data_asof,'2026-10-26T12:00:00+08:00');
+guard=load();assert.equal(guard.restore('alerts',older).status_snapshot_date,alertSeed.status_snapshot_date);
+console.log('Alerts: stale business/status date rejection, reload retention and execution isolation passed.');

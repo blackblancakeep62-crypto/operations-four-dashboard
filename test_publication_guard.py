@@ -24,6 +24,11 @@ def pair(module,data):
     raw=json.dumps(data,ensure_ascii=False).encode()
     return {name:raw,script:prefix.encode()+raw+b';'}
 
+def alerts(stamp='2026-10-26T14:00:00+08:00'):
+    return {'schema':'alerts-v1','business_cutoff':'2026-10-24','status_snapshot_date':'2026-10-26',
+            'latest_action_date':'2026-10-21','last_success_at':stamp,'checked_at':stamp,
+            'data_asof':'2026-10-24T23:59:59+08:00','parents':[],'entries':[],'history':[],'actions':[]}
+
 class PublicationTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.base=Path(self.tmp.name)
@@ -32,6 +37,7 @@ class PublicationTests(unittest.TestCase):
         self.clone(self.a)
         p.git(self.a,'checkout','-b','main')
         initial={**pair('targets',target('2026-10-22','2026-10-23T10:00:00+08:00')),
+                 **pair('alerts',alerts()),
                  **pair('execution',execution('2026-10-26T10:00:00+08:00'))}
         for name in p.STATIC:
             if name not in initial:initial[name]=b'preserve-'+name.encode()
@@ -69,6 +75,13 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(self.observed('execution'),execution())
         changed=p.text(self.b,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()
         self.assertEqual(set(changed),set(p.MODULES['targets'][:2]))
+
+    def test_alert_publish_cannot_touch_execution_or_business(self):
+        before={name:p.git(self.a,'show','origin/main:'+name) for name in ('execution.json','targets.json','summary.json')}
+        d=alerts('2026-10-27T14:00:00+08:00')
+        result=p.publish_module(self.b,'alerts',pair('alerts',d))
+        for name,raw in before.items():self.assertEqual(p.git(self.b,'show',result['commit']+':'+name),raw)
+        self.assertEqual(set(p.text(self.b,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()),{'alerts.json','alerts-data.js'})
 
     def test_real_concurrent_push_conflict_retries_on_new_main(self):
         original=p.git;injected=[]
@@ -124,6 +137,7 @@ class PublicationTests(unittest.TestCase):
         (self.a/'targets.json').write_bytes(b'old local build must never be packaged')
         output=self.base/'site'
         live={'targets':target('2026-10-22','2026-10-23T10:00:00+08:00'),
+              'alerts':alerts(),
               'execution':execution('2026-10-26T10:00:00+08:00')}
         manifest=p.prepare_site(self.a,output,live_reader=lambda module:live[module])
         self.assertEqual(manifest['source_commit'],result['commit'])

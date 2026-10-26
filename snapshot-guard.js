@@ -8,6 +8,10 @@ window.SNAPSHOT_GUARD=(()=>{
       if(data?.schema_version!==1||!data.departments||!data.personal)throw Error('snapshot schema');
       for(const [p,e] of Object.entries(data.departments))if(e.actual)out['department/'+p]=e.actual;
       for(const [p,people] of Object.entries(data.personal))for(const [n,e] of Object.entries(people))if(e.actual)out['personal/'+p+'/'+n]=e.actual;
+    }else if(module==='alerts'){
+      if(data?.schema!=='alerts-v1'||!['parents','entries','history','actions'].every(k=>Array.isArray(data[k])))throw Error('snapshot schema');
+      for(const k of ['business_cutoff','status_snapshot_date','last_success_at','checked_at'])if(!data[k])throw Error('missing alerts date');
+      out.root=data;
     }else{
       if(data?.schema!=='execution-sync-v1'||!data.groups)throw Error('snapshot schema');
       out.root=data;
@@ -24,7 +28,10 @@ window.SNAPSHOT_GUARD=(()=>{
         if(current.start!==old.start||current.basis!==old.basis)throw Error('changed scope');
         if(!current.cutoff||current.cutoff<old.cutoff)throw Error('older business date');
         fields=current.cutoff===old.cutoff?['refreshed_at']:[];
-      }else fields=['data_asof','last_success_at','checked_at'];
+      }else {
+        if(module==='alerts')for(const k of ['business_cutoff','status_snapshot_date','latest_action_date'])if(old[k]&&(!current[k]||current[k]<old[k]))throw Error('older alerts date');
+        fields=['data_asof','last_success_at','checked_at'];
+      }
       for(const field of fields)if(old[field]&&(!current[field]||!Number.isFinite(Date.parse(current[field]))||Date.parse(current[field])<Date.parse(old[field])))throw Error('older snapshot time');
     }
     return true;
