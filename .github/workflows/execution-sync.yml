@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '7,22,37,52 * * * *'
+    - cron: '30 2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,18 +25,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check read authorization
+      - name: Check Apps Script readiness
         id: credentials
-        env:
-          SA: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
-          OAUTH: ${{ secrets.GOOGLE_DRIVE_OAUTH_JSON }}
         run: |
-          if [ -n "$SA" ] || [ -n "$OAUTH" ]; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo 'Google read authorization is missing; retaining last valid snapshot.'
-          fi
+          echo 'ready=false' >> "$GITHUB_OUTPUT"
+          echo 'Apps Script read/conversion verification is awaiting owner authorization; old service-account route disabled.'
       - uses: actions/setup-python@v5
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
         with:
@@ -49,33 +42,6 @@ jobs:
       - name: Isolated regression checks
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
         run: python -m unittest test_execution_sync -q
-      - uses: actions/cache/restore@v4
-        if: steps.credentials.outputs.ready == 'true'
-        with:
-          path: .execution-cache.enc
-          key: execution-drive-cache-${{ github.run_id }}
-          restore-keys: execution-drive-cache-
-      - name: Read changed execution workbooks only
-        if: steps.credentials.outputs.ready == 'true'
-        env:
-          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
-          GOOGLE_DRIVE_OAUTH_JSON: ${{ secrets.GOOGLE_DRIVE_OAUTH_JSON }}
-        run: python sync_execution.py
-      - uses: actions/cache/save@v4
-        if: steps.credentials.outputs.ready == 'true'
-        with:
-          path: .execution-cache.enc
-          key: execution-drive-cache-${{ github.run_id }}
-      - name: Commit execution snapshot only
-        if: steps.credentials.outputs.ready == 'true'
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add execution.json execution-data.js
-          if ! git diff --cached --quiet; then
-            git commit -m 'Sync execution status from read-only Drive inputs'
-            git push origin HEAD:main
-          fi
       - name: Package public static files only
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
         run: |
