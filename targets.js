@@ -18,6 +18,7 @@ function goalMetric(m){
 }
 function renderDepartment(){
  if(!G)return;const period=tg('goalPeriod').value,d=G.departments[period];
+ tg('departmentDate').textContent='统计截止 '+(d?.actual?.cutoff||'待接入')+(!d?.actual?' · 实际待接入':goalStale(d.actual,period)?' · 保留旧快照':'');
  if(!d){tg('departmentGoalBody').innerHTML='<p>目标待配置</p>';return;}
  const a=d.actual,amount=d.metrics.find(m=>m.key==='sales'),progress=amount?.time_progress;
  tg('departmentGoalStatus').textContent=`统计截止：${a?.cutoff||'待接入'} · 覆盖：${a?.coverage||'不足4/4同截止日'}${a?.joint_pending?'（另有'+a.joint_pending+'条多人归属未分摊）':''} · ${!a?'实际数据待接入':goalStale(a,period)?'已过期，保留上一有效快照':a.joint_pending?'单一归属范围完整，多人归属待核验':'数据完整'} · 最近成功同步：${timeText(G.last_successful_sync)}`;
@@ -25,6 +26,8 @@ function renderDepartment(){
 }
 function renderPersonal(){
  if(!G)return;const period=tg('personalGoalMonth').value,people=G.personal[period]||{},opened=new Set([...tg('personalGoalBody').querySelectorAll('.personal-goal')].filter(e=>e.querySelector('details')?.open).map(e=>e.dataset.manager));
+ const actuals=Object.values(people).map(p=>p.actual),dates=[...new Set(actuals.map(a=>a?.cutoff).filter(Boolean))].sort();
+ tg('personalDate').textContent='统计截止 '+(dates.length?dates.length===1?dates[0]:dates[0]+' ～ '+dates[dates.length-1]:'待接入')+(actuals.length<4||actuals.some(a=>!a)?' · 部分实际待接入':actuals.some(a=>goalStale(a,period))?' · 存在旧快照':'');
  tg('personalGoalBody').innerHTML=['李漉','陈梦怡','陈芳志','陈晞'].map(name=>{
   const p=people[name]||{target_status:'待配置',metrics:[]},a=p.actual,report=(window.OPERATIONS_DATA?.groups||[]).find(g=>g.manager===name),nameHtml=report?.report_verified?`<a href="${tx(report.report_url)}" target="_blank" rel="noopener">${tx(name)} ↗</a>`:tx(name),primary=p.metrics.find(m=>m.key==='sales'),summary=primary?`<strong>${tv(primary.actual,primary)}</strong><span>销售额完成率（准） ${tp(primary.completion?.[1])}</span>`:name==='陈晞'?'<strong>专项实际待接入</strong><span>清理及淘汰利润：单位与规则待核验</span>':'<strong>目标待配置</strong>';
   return `<article class="personal-goal" data-manager="${tx(name)}"><div class="goal-person-head"><h3>${nameHtml}</h3><span>${tx(p.target_status)}</span></div><div class="goal-person-summary">${summary}</div><p class="goal-muted">数据截至 ${a?.cutoff||'待接入'} · ${!a?'实际数据待接入':goalStale(a,period)?'过期/本次缺失，保留上一有效值':a.joint_pending?'单一归属金额已接入，多人归属待核验':'经营数据完整'}<br>最后有效更新时间 ${timeText(a?.refreshed_at)}</p><details ${opened.has(name)?'open':''}><summary>展开指标、权重与档位差距</summary>${p.metrics.length?p.metrics.map(m=>{const gap=m.next_gap==null?'—':m.unit==='ratio'?tn(m.next_gap*100)+'个百分点':tv(m.next_gap,m);return `${goalMetric(m)}<p class="goal-muted">距下一档 ${tx(gap)} · 较上月 ${m.previous_change==null?'待可比实际':tx(tv(m.previous_change,m))}${m.previous_actual!=null?` · 上月完成 ${tx(tv(m.previous_actual,m))}`:''}<br>${tx(m.previous_note)}</p>`;}).join(''):'<p class="goal-muted">本月个人目标待配置，未沿用10月目标。</p>'}</details><p class="goal-muted">${p.weight_total!=null?`已提供权重 ${tp(p.weight_total)}；仅展示核心指标，不计算完整绩效得分。`:'尚无该月个人绩效配置。'}</p></article>`;
@@ -33,9 +36,10 @@ function renderPersonal(){
 function renderTargets(){
  const active=document.querySelector('nav button.active')?.dataset.tab==='all';tg('departmentGoals').hidden=!active;tg('personalGoals').hidden=!active;
  if(!active)return;
- if(!G){tg('goalSyncStatus').textContent='每日目标快照尚未接入；现有经营诊断保持独立。';return;}
+ if(!G){tg('departmentDate').textContent=tg('personalDate').textContent='每日目标快照待接入';tg('goalSyncAlert').hidden=false;tg('goalSyncAlert').textContent='每日目标快照尚未接入';tg('goalSyncStatus').textContent='每日目标快照尚未接入；现有经营诊断保持独立。';return;}
  const fail=G.last_attempt?.status==='failed'||G.last_attempt?.status==='partial';
  tg('goalSyncStatus').textContent=(targetNetworkError?'网页同步读取失败，保留上一有效展示。 ':fail?'最近同步异常，缺失负责人保留旧值，跨截止日不合计。 ':'')+G.basis_note+` 另有${G.validation_warnings.length}项目标加总差异，详见下方校验。`;
+ tg('goalSyncAlert').hidden=false;tg('goalSyncAlert').textContent=(targetNetworkError?'网页同步读取失败，保留上一有效展示。 ':fail?'最近同步异常，缺失负责人保留旧值，跨截止日不合计。 ':'')+(G.basis_note.match(/[^。]*待[^。]*。?/g)||[]).join('')+(G.validation_warnings.length?`${G.validation_warnings.length}项目标加总差异见下方校验。`:'');tg('goalSyncAlert').hidden=!tg('goalSyncAlert').textContent;
  tg('goalWarnings').innerHTML=G.validation_warnings.map(w=>`<li>${tx(({sales:'销售额月度合计',net_profit:'净利润月度合计',old_plus_new_sales:'Q4老品＋新品合计'})[w.metric])}（${tx(w.tier)}）：${tn(w.monthly_sum,0)}；Q4原目标 ${tn(w.q4_target,0)}；差异 ${tn(w.difference,0)} 元。保留原目标。</li>`).join('');
  renderDepartment();renderPersonal();
 }

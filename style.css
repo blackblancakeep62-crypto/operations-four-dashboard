@@ -16,3 +16,41 @@ header{position:static;padding-bottom:1px}
 @media(max-width:650px){.navigation-bar{padding:8px 20px 0}.navigation-bar nav{width:100%}.navigation-bar .toolbar{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.navigation-bar .toolbar label:last-child{grid-column:1/-1}}
 
 .execution-sync-status{font-size:12px;line-height:1.6;color:#526176;padding:8px 12px;}
+
+/* Primary modules share one hierarchy; card and table headings retain their scale. */
+.panel,.module-section{margin:0 0 32px;min-width:0}
+.module-header{align-items:flex-start;gap:20px;padding:4px 0 16px 16px;margin-bottom:20px;border-left:4px solid #183e63;border-bottom:1px solid var(--line)}
+.module-header>div:first-child{min-width:0;flex:1}
+.module-heading{color:#183e63;font-size:22px;font-weight:700;line-height:1.45;overflow-wrap:anywhere}
+.module-header p{font-size:12px;line-height:1.7;margin:6px 0 0;color:#66788a}
+.module-tools{display:flex;flex-direction:column;align-items:flex-end;gap:10px;max-width:42%;min-width:0}
+.module-meta{display:block;max-width:42%;font-size:11px;font-weight:400;line-height:1.7;color:#6f7e8d;text-align:right;overflow-wrap:anywhere}
+.module-tools .module-meta{max-width:100%}
+.module-tools label{align-items:flex-start}
+.module-section .cards{margin-bottom:0}
+.basis-notes{font-size:11px;color:#6f7e8d;margin:12px 0;line-height:1.8}
+.basis-notes>summary{font-size:12px;color:#60758b}
+.basis-notes .goal-muted{margin:8px 0}
+footer{padding-top:8px;border-top:1px solid var(--line);align-items:flex-start}
+footer>.basis-notes{max-width:75%;margin:0}
+.goal-context{flex-wrap:wrap}
+.goal-context strong{font-size:12px}
+@media(max-width:800px){
+ .module-header{flex-direction:column;gap:12px}
+ .module-meta,.module-tools{max-width:100%;text-align:left;align-items:flex-start}
+ .module-tools{width:100%}
+ .module-tools label{width:100%}
+ .module-tools select{min-width:0;width:100%}
+}
+@media(max-width:650px){
+ .panel{padding:18px 16px}
+ .panel,.module-section{margin-bottom:26px}
+ .module-header{padding:2px 0 14px 12px;margin-bottom:16px}
+ .module-heading{font-size:20px}
+ .card{min-width:0}
+ .card dd{overflow-wrap:anywhere}
+ .alert{gap:10px}
+ .alert span{min-width:0;overflow-wrap:anywhere}
+ .goal-person-head{flex-wrap:wrap}
+ footer>.basis-notes{max-width:100%;margin-top:12px}
+}
