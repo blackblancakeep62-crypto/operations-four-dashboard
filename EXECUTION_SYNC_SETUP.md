@@ -30,3 +30,25 @@ The pricing view shows source-read time and the latest successful synchronizatio
 in Beijing time; an empty execution sheet yields zero started/completed tests and
 an unknown (not zero) verified increment. Theory remains separate. Manual records
 are never written. Workflow dispatch exercises the same daily path immediately.
+
+## Shared publication boundary
+
+Business delivery owns only `targets.json` and `targets-data.js`; execution owns
+only `execution.json` and `execution-data.js`. Both use `publication_guard.py`:
+each non-force push overlays its two blobs on freshly fetched main, validates
+all existing period/owner cutoffs and timestamps, and retries conflicts up to
+three times with revalidation. It never rebases an old data commit blindly.
+
+The sole Pages workflow keeps concurrency group `dashboard-pages`, checks out
+main, and packages allowlisted blobs from the latest remote main after any
+execution update. It compares data dates against the live last-good snapshots,
+verifies JSON/embedded-JS parity, adds content hashes to all JS/CSS URLs, and
+records source SHA and hashes in `publication.json`. If main changes after
+packaging, deployment stops; the queued newer push publishes instead.
+
+The browser retains each module's last-good public aggregate snapshot separately
+and rejects older dates/timestamps on refresh or reload. No business/ERP metrics,
+manual records or Apps Script read/authorization logic are changed. An explicit
+manual backend rollback requires `--allow-rollback --reason ...`; scheduled
+tasks never pass that option. Browser last-good storage also intentionally needs
+an operator reset for an explicitly approved historical rollback.

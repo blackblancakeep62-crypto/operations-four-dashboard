@@ -1,4 +1,5 @@
 'use strict';
+window.EXECUTION_DATA=window.SNAPSHOT_GUARD.restore('execution',window.EXECUTION_DATA||null);
 // Overlay execution counts only; keep all ERP financials and pricing theory.
 const executionBaseOp=op;
 op=function(g){
@@ -30,7 +31,7 @@ async function refreshExecution(){
     if(!response.ok)throw Error('fetch');
     const next=await response.json();
     if(next.schema!=='execution-sync-v1'||!next.groups)throw Error('schema');
-    window.EXECUTION_DATA=next;renderExecution();
+    window.EXECUTION_DATA=window.SNAPSHOT_GUARD.accept('execution',next);renderExecution();
   }catch{
     executionStatus();
     if(!$('executionSyncStatus').hidden)$('executionSyncStatus').textContent+=' 网页获取同步结果失败，保留上次有效数据。';

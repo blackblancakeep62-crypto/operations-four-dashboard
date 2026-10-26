@@ -25,6 +25,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
       - name: Check Apps Script readiness
         id: credentials
         env:
@@ -48,7 +51,9 @@ jobs:
         run: python -m pip install -r requirements-execution.txt
       - name: Isolated regression checks
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
-        run: python -m unittest test_execution_sync test_apps_script_transport -q
+        run: |
+          python -m unittest test_execution_sync test_apps_script_transport test_publication_guard -q
+          node test_snapshot_guard.cjs
       - name: Read four execution sheets through Apps Script
         if: github.event_name != 'push' && steps.credentials.outputs.ready == 'true'
         env:
@@ -58,22 +63,17 @@ jobs:
       - name: Save aggregate snapshot and sync status
         if: github.event_name != 'push' && steps.credentials.outputs.ready == 'true'
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add execution.json execution-data.js
-          if ! git diff --cached --quiet; then
-            git commit -m 'Update daily execution snapshot and sync status'
-            git push origin HEAD:main
-          fi
+          python publication_guard.py publish --module execution
       - name: Package public static files only
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
-        run: |
-          mkdir _site
-          cp .nojekyll index.html style.css app.js summary.json summary-data.js targets.json targets-data.js targets.js execution.json execution-data.js execution-sync.js _site/
+        run: python publication_guard.py package --output _site
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
         with:
           path: _site
+      - name: Reject superseded build before deployment
+        if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'
+        run: python publication_guard.py check-latest --output _site
       - name: Deploy validated snapshot
         id: deployment
         if: github.event_name != 'schedule' || steps.credentials.outputs.ready == 'true'

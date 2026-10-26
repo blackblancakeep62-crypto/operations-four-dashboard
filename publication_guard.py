@@ -1,0 +1,184 @@
+"""Publication only: module ownership, monotonic dates, optimistic Git writes.
+
+No ERP, source workbooks, metric calculations or messaging APIs.
+"""
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import tempfile
+import urllib.request
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+MODULES = {
+    'targets': ('targets.json', 'targets-data.js', 'window.OPERATIONS_TARGETS='),
+    'execution': ('execution.json', 'execution-data.js', 'window.EXECUTION_DATA='),
+}
+STATIC = ('.nojekyll','index.html','style.css','app.js','summary.json','summary-data.js',
+          'targets.json','targets-data.js','targets.js','execution.json',
+          'execution-data.js','execution-sync.js','snapshot-guard.js')
+LIVE = 'https://blackblancakeep62-crypto.github.io/operations-four-dashboard/'
+
+class PublicationError(ValueError):
+    pass
+
+def versions(module, data):
+    result = {}
+    if module == 'targets':
+        if data.get('schema_version') != 1: raise PublicationError('invalid_targets_schema')
+        for period, entry in data['departments'].items():
+            if entry.get('actual'):
+                result['department/'+period] = entry['actual']
+        for period, people in data['personal'].items():
+            for name, entry in people.items():
+                if entry.get('actual'):
+                    result['personal/'+period+'/'+name] = entry['actual']
+    else:
+        if data.get('schema') != 'execution-sync-v1': raise PublicationError('invalid_execution_schema')
+        result['root'] = data
+        result.update({'group/'+k:v for k,v in data['groups'].items()})
+    return result
+
+def instant(value):
+    parsed = datetime.fromisoformat(str(value).replace('Z','+00:00'))
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+def assert_no_regression(module, candidate, previous, allow_rollback=False, reason=''):
+    new, old = versions(module,candidate), versions(module,previous)
+    if allow_rollback:
+        if not reason.strip(): raise PublicationError('manual_rollback_reason_required')
+        return
+    for scope, before in old.items():
+        after = new.get(scope)
+        if after is None: raise PublicationError('missing_previous_scope:'+scope)
+        if module == 'targets':
+            if (after.get('start'),after.get('basis')) != (before.get('start'),before.get('basis')):
+                raise PublicationError('statistical_basis_changed:'+scope)
+            if not after.get('cutoff') or after['cutoff'] < before['cutoff']:
+                raise PublicationError('older_business_cutoff:'+scope)
+            fields = ('refreshed_at',) if after['cutoff'] == before['cutoff'] else ()
+        else:
+            fields = ('data_asof','last_success_at','checked_at')
+        for field in fields:
+            if before.get(field) and (not after.get(field) or instant(after[field]) < instant(before[field])):
+                raise PublicationError('older_snapshot_timestamp:'+scope+'/'+field)
+
+def validate_pair(module, payload):
+    name, script, prefix = MODULES[module]
+    view = json.loads(payload[name].decode('utf-8-sig'))
+    text = payload[script].decode('utf-8-sig').strip()
+    if not text.startswith(prefix) or not text.endswith(';'):
+        raise PublicationError('invalid_embedded_snapshot')
+    if json.loads(text[len(prefix):-1]) != view:
+        raise PublicationError('json_js_snapshot_mismatch')
+    versions(module,view)
+    return view
+
+def git(repo, *args, stdin=None, env=None):
+    result = subprocess.run(['git','-C',str(repo),*args],input=stdin,capture_output=True,
+                            timeout=120,env={**os.environ,'GIT_TERMINAL_PROMPT':'0',
+                            'GCM_INTERACTIVE':'never',**(env or {})})
+    if result.returncode:
+        raise PublicationError('git_'+args[0]+'_failed:'+result.stderr.decode('utf8','replace')[-350:])
+    return result.stdout
+
+def text(repo,*args,**kwargs):
+    return git(repo,*args,**kwargs).decode('utf8').strip()
+
+def committed_payload(repo, revision, module):
+    return {name:git(repo,'show',revision+':'+name) for name in MODULES[module][:2]}
+
+def publish_module(repo, module, payload=None, attempts=3, allow_rollback=False, reason=''):
+    """Each attempt overlays only two owned blobs onto a freshly fetched main.
+
+    A rejected non-force push retries from the new head and rechecks data dates.
+    No checkout/reset/rebase of uncommitted source or another module's files.
+    """
+    payload = payload or {name:(Path(repo)/name).read_bytes() for name in MODULES[module][:2]}
+    if set(payload) != set(MODULES[module][:2]): raise PublicationError('module_ownership_violation')
+    candidate = validate_pair(module,payload)
+    for attempt in range(attempts):
+        git(repo,'fetch','origin','main')
+        parent = text(repo,'rev-parse','origin/main')
+        previous = validate_pair(module,committed_payload(repo,parent,module))
+        assert_no_regression(module,candidate,previous,allow_rollback,reason)
+        with tempfile.TemporaryDirectory(prefix='dashboard-index-') as folder:
+            env = {'GIT_INDEX_FILE':str(Path(folder)/'index')}
+            git(repo,'read-tree',parent,env=env)
+            for name, raw in payload.items():
+                blob = text(repo,'hash-object','-w','--stdin',stdin=raw)
+                git(repo,'update-index','--add','--cacheinfo','100644,'+blob+','+name,env=env)
+            tree = text(repo,'write-tree',env=env)
+        if tree == text(repo,'rev-parse',parent+'^{tree}'):
+            return {'commit':parent,'changed':False,'attempts':attempt+1}
+        message = 'Update '+module+' snapshot only'
+        if allow_rollback: message += ' [manual rollback: '+reason.strip()+']'
+        commit = text(repo,'-c','user.name=Operations Dashboard Sync','-c',
+                      'user.email=dashboard-sync@users.noreply.github.com',
+                      'commit-tree',tree,'-p',parent,'-m',message)
+        try:
+            git(repo,'push','origin',commit+':refs/heads/main')
+            return {'commit':commit,'changed':True,'attempts':attempt+1}
+        except PublicationError:
+            if attempt == attempts-1: raise
+
+def load_live(module):
+    name = MODULES[module][0]
+    request = urllib.request.Request(LIVE+name+'?publication_check='+uuid.uuid4().hex,
+                                     headers={'Cache-Control':'no-cache'})
+    with urllib.request.urlopen(request,timeout=30) as response:
+        return json.load(response)
+
+def prepare_site(repo, output, live_reader=load_live, allow_rollback=False, reason=''):
+    git(repo,'fetch','origin','main')
+    head = text(repo,'rev-parse','origin/main')
+    contents = {name:git(repo,'show',head+':'+name) for name in STATIC}
+    data = {}
+    for module in MODULES:
+        data[module] = validate_pair(module,contents)
+        # Fail closed if live state cannot be verified. Never deploy a cached
+        # local build directory or an event SHA older than the published data.
+        assert_no_regression(module,data[module],live_reader(module),allow_rollback,reason)
+    html = contents['index.html'].decode('utf8')
+    def version_asset(match):
+        attr,path = match.groups()
+        name = path.split('?')[0]
+        if name not in contents or not name.endswith(('.js','.css')):return match.group(0)
+        return attr+'="'+name+'?v='+hashlib.sha256(contents[name]).hexdigest()[:16]+'"'
+    contents['index.html'] = re.sub(r'(src|href)="([^"]+)"',version_asset,html).encode()
+    output = Path(output);output.mkdir(parents=True,exist_ok=False)
+    for name,raw in contents.items():(output/name).write_bytes(raw)
+    manifest = {'source_commit':head,'generated_at':datetime.now(timezone.utc).isoformat(),
+                'hashes':{n:hashlib.sha256(b).hexdigest() for n,b in contents.items()},
+                'business_cutoffs':{k:v['cutoff'] for k,v in versions('targets',data['targets']).items()},
+                'execution_last_success':data['execution'].get('last_success_at'),
+                'manual_rollback':bool(allow_rollback),'rollback_reason':reason if allow_rollback else None}
+    (output/'publication.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf8')
+    return manifest
+
+def require_latest(repo, output):
+    manifest = json.loads((Path(output)/'publication.json').read_text(encoding='utf8'))
+    git(repo,'fetch','origin','main')
+    if manifest['source_commit'] != text(repo,'rev-parse','origin/main'):
+        raise PublicationError('main_advanced_after_packaging_defer_to_next_serial_run')
+
+if __name__ == '__main__':
+    parser=argparse.ArgumentParser()
+    parser.add_argument('action',choices=('publish','package','check-latest'))
+    parser.add_argument('--repo',type=Path,default=Path('.'))
+    parser.add_argument('--module',choices=tuple(MODULES))
+    parser.add_argument('--output',type=Path,default=Path('_site'))
+    parser.add_argument('--allow-rollback',action='store_true')
+    parser.add_argument('--reason',default='')
+    args=parser.parse_args()
+    if args.action=='publish':
+        if not args.module:parser.error('--module required')
+        print(json.dumps(publish_module(args.repo,args.module,allow_rollback=args.allow_rollback,reason=args.reason)))
+    elif args.action=='package':
+        result=prepare_site(args.repo,args.output,allow_rollback=args.allow_rollback,reason=args.reason)
+        print(json.dumps({'source_commit':result['source_commit'],'cutoffs':result['business_cutoffs']}))
+    else:require_latest(args.repo,args.output)
