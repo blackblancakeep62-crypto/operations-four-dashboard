@@ -13,7 +13,7 @@ function executionStatus(){
   const state=window.EXECUTION_DATA||{}, selected=groups();
   const fmt=v=>v?new Date(v).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚无成功同步';
   const authorization=state.automation==='awaiting_google_authorization'||state.status==='authorization_required';
-  const details=selected.map(g=>{const x=state.groups?.[g.manager];return g.manager+'：'+fmt(x?.last_success_at)+(x?.status&&x.status!=='ok'?'（同步失败/待授权，保留上次有效值）':'');}).join('；');
+  const details=selected.map(g=>{const x=state.groups?.[g.manager],late=!authorization&&(!x?.last_success_at||Date.now()-Date.parse(x.last_success_at)>45*60000);return g.manager+'：'+fmt(x?.last_success_at)+(x?.status&&x.status!=='ok'?'（同步失败/待授权，保留上次有效值）':late?'（同步超时，保留上次有效值）':'');}).join('；');
   const incomplete=selected.reduce((n,g)=>n+(state.groups?.[g.manager]?.operational?.incomplete_execution_records||0),0);
   box.textContent=(authorization?'执行表自动同步待 Google 只读授权；当前为已核验云端快照。':'执行表每15分钟检查；网页每60秒读取同步结果。')+' '+details+'。'+(incomplete?' 有'+incomplete+'条记录缺实际启动证据，不计入实际测试。':'')+' 理论增量与已验证增量分开；已验证增量仍需对照、证据及FX/广告/促销/断货核验。';
 }
