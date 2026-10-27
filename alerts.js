@@ -25,10 +25,10 @@
   const active=document.querySelector('nav button.active')?.dataset.tab==='warnings';
   el('warningPage').hidden=!active;
   const summary=el('warningSummary');summary.hidden=document.querySelector('nav button.active')?.dataset.tab!=='all';
-  if(!data){summary.textContent='预警尚无有效快照';return;}
+  if(!data){summary.textContent='预警尚无有效快照';if(active){el('freshness').textContent='预警尚无有效快照';el('periodCoverage').textContent='该周期暂无完整数据 · 预警实际统计截止：待同步。';}return;}
   const parents=filtered(data.parents),risk=parents.filter(p=>data.entries.some(e=>e.parent===p.parent&&e.kind==='risk')),growth=parents.filter(p=>data.entries.some(e=>e.parent===p.parent&&e.kind==='growth'));
   const late=Date.now()>Date.parse(data.next_sync_due),failed=networkError||data.status!=='ok';
-  const signature=[document.querySelector('nav button.active')?.dataset.tab,el('manager').value,el('site').value,el('warningActionLimit').value,data.checked_at,late,failed].join('|');
+  const signature=[document.querySelector('nav button.active')?.dataset.tab,el('manager').value,el('site').value,el('period').value,el('warningActionLimit').value,data.checked_at,late,failed].join('|');
   if(signature===lastRender)return;lastRender=signature;
   const status=failed?'同步失败，保留上次有效数据（已过期／待更新）':late?'快照已过期，保留上次有效数据':'首次真实数据已核验';
   summary.innerHTML=`<strong>运营预警：${parents.length} 个父单</strong> · 异常 ${risk.length} · 红榜 ${growth.length} · ${h(status)} <button type="button" id="openWarnings">查看运营预警 →</button><small>${h(dates())}</small>`;
@@ -36,6 +36,8 @@
   if(!active)return;
   el('freshness').textContent=dates();
   el('notice').textContent='按原表已计算结果展示；当前预警快照独立于经营周期筛选。原表记录由运营维护，网页只读。';
+  const selected=window.OPERATING_PERIODS.parse(el('period').value);
+  el('periodCoverage').textContent='所选周期 '+(selected?selected.start+' — '+(selected.end||'暂无完整自然日'):'待选择')+'。该周期暂无完整数据：运营预警为状态快照，不支持按所选周/月回溯；以下榜单、历史状态及人工动作保留原有统计含义。实际统计截止：'+dates()+'。';
   el('warningSync').textContent=status+'。'+(data.automation==='awaiting_native_reader'?'当前为一次真实读取快照；每周自动同步待原生 Sheets 读取器授权接入。':'每周读取原表已计算结果。')+(data.warnings?.length?` 原表 ${data.warnings.length} 条历史记录存在公式错误，详见历史状态。`:'');
   document.querySelectorAll('.warning-meta').forEach(n=>n.textContent=dates());
   el('warningOverviewBody').innerHTML=`<div class="metrics">${[['去重预警父单',parents.length],['异常父单',risk.length],['红榜父单',growth.length],['归属待核验',parents.filter(p=>!p.owner).length],['需跟进（源表）',parents.filter(p=>p.needs_followup==='是').length],['已勾选完成',parents.filter(p=>p.completed===true).length]].map(([k,v])=>`<div class="metric"><h3>${h(k)}</h3><div class="value">${v}</div></div>`).join('')}</div><p>${['成长榜','效率榜','潜力榜','黑榜','广告烧钱无效榜','利润透支榜','广告依赖榜'].map(b=>pills([b+' '+parents.filter(p=>p.labels.includes(b)).length])).join('')}</p><p class="subtle">同一父单全部标签保留，总数按“国家&父单”去重；各榜数量可能重叠。完成勾选不代表收益已验证。归属冲突记录保留在全部负责人范围。</p>`;
