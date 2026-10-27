@@ -175,20 +175,41 @@ function selectedObservation(){
  const p=selectedPeriod(),o=W?.observation_snapshot;
  return tab==='all'&&$('manager').value==='all'&&$('site').value==='all'&&p?.kind==='week'&&o?.start===p.start&&o.end===p.end&&o.status==='partially_verified'&&o.formal===false&&o.complete===false&&o.amount_reconciliation_passed===true&&o.department_coverage_complete===false?o:null;
 }
-function renderWeeklyObservation(){
- const box=$('weeklyObservation');if(!box)return;
- const o=selectedObservation();box.hidden=!o;if(!o){box.innerHTML='';return;}
- const cash=v=>v==null?'—':'¥'+num(v,2);
- const c=o.confirmed,u=o.department_confirmed_unassigned,p=o.pending,d=o.reconciliation_difference,last=o.reference_week;
- const dates=esc(o.start+' — '+o.end),prior=last?esc(last.start+' — '+last.end):'暂无完整周快照';
- box.innerHTML=`<div class="panelhead"><div><h2 id="weeklyObservationTitle">${dates} 周观察</h2><p class="observation-label">部分已核验／非正式完整业绩</p></div><span class="observation-state">金额对账通过（差异单列） · 部门覆盖未通过</span></div>
- <div class="observation-grid"><article><h3>已确认金额 · ${dates}</h3><dl><div><dt>调整后销售额</dt><dd>${cash(c.adjusted_sales_cny)}</dd></div><div><dt>调整后净利润</dt><dd>${cash(c.adjusted_net_profit_cny)}</dd></div><div><dt>确认小计利润率</dt><dd>${pct(c.adjusted_net_margin)}</dd></div></dl><p>原始销售额 ${cash(c.orderProductSales)}；净利润 ${cash(c.salesNetProfit)}。</p><p>已含个人暂挂${num(u.records)}条：原始销售额 ${cash(u.metrics.orderProductSales)}、净利润 ${cash(u.metrics.salesNetProfit)}；部门计入一次，不分配个人。</p></article>
- <article><h3>待核验差额 · ${dates}</h3><dl><div><dt>原始销售额</dt><dd>${cash(p.raw_sales)}</dd></div><div><dt>原始净利润</dt><dd>${cash(p.raw_net_profit)}</dd></div></dl><p>${num(p.records)}条待核明细，其中${num(p.financially_nonzero_records)}条非零。此为全源部门待核范围，不能全部加回四组。</p><p>另列净利润对账差 ${cash(d.raw_net_profit_delta)}：${d.compatible_with_two_decimal_rounding?'与两位小数舍入现象相容，尚未获ERP确认':'原因尚待确认'}；未忽略、未分配。</p></article>
- <article><h3>上一完整周 · ${prior}</h3><dl><div><dt>调整后销售额</dt><dd>${cash(last?.metrics?.adjusted_sales_cny)}</dd></div><div><dt>调整后净利润</dt><dd>${cash(last?.metrics?.adjusted_net_profit_cny)}</dd></div></dl><p>保留原有效快照${last?.retained_previous?'及原发布范围':''}；最新周观察数据不覆盖它。</p></article></div>
- <p class="observation-limit">观察金额不用于正式部门目标完成率、个人绩效、正式趋势或自动经营结论。下方正式指标保留完整性校验，未通过的最新周留空。</p>
- <details><summary>查看对账差与归属缺口</summary><p>共管${num(o.attribution_gaps?.joint_source_records)}条，${num(o.attribution_gaps?.joint_msku_reconciled)}条已有可勾稽MSKU明细，${num(o.attribution_gaps?.joint_outcomes?.personal_resolved)}条完成金额归属；未确认部分留在独立异常台账。其余346条中${num(o.attribution_gaps?.other_346_review?.department_unassigned?.records)}条已确认四组并保留个人暂挂，${num(o.attribution_gaps?.other_346_review?.department_unconfirmed?.records)}条仍为部门待核。</p><ul>${(d.components||[]).map(x=>`<li>${esc(x.country+' / '+x.asin)}：原ASIN减MSKU净利润 ${cash(x.raw_net_profit_delta)}</li>`).join('')}</ul><p>分项合计 ${cash(d.raw_net_profit_delta)}。源精度及ERP舍入方法未被独立确认，差异继续待核。</p></details>
- <p class="subtle">观察快照生成 ${esc(o.generated_at.slice(0,19).replace('T',' '))} 北京时间；金额币种CNY，0.9／0.85各执行一次。</p>`;
+function confirmedCardMetrics(){
+ const o=selectedObservation();if(!o)return null;
+ const c=o.confirmed,n=v=>typeof v==='number'&&Number.isFinite(v);
+ const samePeriod=c.source_start===o.start&&c.source_end===o.end;
+ const adjusted=(raw,display,factor)=>samePeriod&&n(c[raw])&&n(c[display])&&Math.abs(c[raw]*factor-c[display])<.011?c[display]:null;
+ const sales=adjusted('orderProductSales','adjusted_sales_cny',.9),profit=adjusted('salesNetProfit','adjusted_net_profit_cny',.85);
+ const verified=key=>samePeriod&&o.metric_validation?.[key]?.source_complete===true&&o.metric_validation[key].same_scope===true;
+ return {orderProductSales:sales,salesNetProfit:profit,margin:ratio(profit,sales),
+  unitsOrdered:verified('unitsOrdered')&&n(c.unitsOrdered)?c.unitsOrdered:null,
+  asp:verified('asp')&&n(c.discountCostSales)&&n(c.unitsOrdered)?ratio(c.discountCostSales,c.unitsOrdered):null,
+  ad_rate:verified('ad_rate')&&n(c.adsSpend)&&n(c.orderProductSales)?ratio(Math.abs(c.adsSpend),c.orderProductSales):null};
 }
+function confirmedMetricCards(){
+ const m=confirmedCardMetrics();if(!m)return null;
+ const cash=v=>v==null?'待核验':'¥'+num(v,2),rate=v=>v==null?'待核验':num(v*100,2)+'%';
+ const label='已确认金额·覆盖待核验';
+ return metric('调整后销售额 · CNY',cash(m.orderProductSales),label+'；同／环比待核验')+
+  metric('调整后净毛利 · CNY',cash(m.salesNetProfit),label)+metric('调整后净毛利率',rate(m.margin),'同口径已确认净利润 ÷ 已确认销售额')+
+  metric('平均成交单价 · CNY',cash(m.asp),m.asp==null?'同范围成交额／销量尚未完整核验':'已确认范围·覆盖待核验')+
+  metric('广告费用率',rate(m.ad_rate),m.ad_rate==null?'同范围广告费／销售额尚未完整核验':'已确认范围·覆盖待核验')+
+  metric('销量',m.unitsOrdered==null?'待核验':num(m.unitsOrdered),m.unitsOrdered==null?'完整销量归属尚未核验':'已确认范围·覆盖待核验');
+}
+function renderWeeklyCoverageDetails(){
+ const box=$('weeklyCoverageDetails'),body=$('weeklyCoverageBody');if(!box||!body)return;
+ const o=selectedObservation();box.hidden=!o;if(!o){body.innerHTML='';return;}
+ const c=o.confirmed,p=o.pending,d=o.reconciliation_difference,u=o.department_confirmed_unassigned,last=o.reference_week;
+ const cash=v=>v==null?'—':'¥'+num(v,2);
+ body.innerHTML=`<p>${esc(o.start+' — '+o.end)}：已确认金额·覆盖待核验。金额分区对账通过，部门覆盖完整性未通过；不是完整部门业绩。</p>
+ <p>已确认原始销售额 ${cash(c.orderProductSales)}、净利润 ${cash(c.salesNetProfit)}；已含个人暂挂${num(u.records)}条（销售额 ${cash(u.metrics.orderProductSales)}、净利润 ${cash(u.metrics.salesNetProfit)}），部门计入一次。</p>
+ <p>待核验原始销售额 ${cash(p.raw_sales)}、净利润 ${cash(p.raw_net_profit)}，${num(p.financially_nonzero_records)}条非零明细。此为全源部门待核范围，不能直接混入四组金额。净利润对账差 ${cash(d.raw_net_profit_delta)}仍未确认；与舍入现象相容不等于ERP确认，未忽略、未分配。</p>
+ <p>共管${num(o.attribution_gaps?.joint_source_records)}条，${num(o.attribution_gaps?.joint_msku_reconciled)}条已完成MSKU金额勾稽；其他346条中${num(o.attribution_gaps?.other_346_review?.department_unconfirmed?.records)}条仍待核，独立异常台账保留。销量、广告费率、平均单价及同／环比仅在同范围来源完整并核验后逐项展示。</p>
+ <p>上一完整周 ${last?esc(last.start+' — '+last.end):'暂无'}：调整后销售额 ${cash(last?.metrics?.adjusted_sales_cny)}、净利润 ${cash(last?.metrics?.adjusted_net_profit_cny)}（保留原有效快照范围）；不以旧周冒充本周，也不与当前部分范围计算同比或环比。</p>
+ <p>当前周金额仅作经营观察，不进入正式部门目标完成率、个人绩效、正式趋势或自动经营结论。月度正式经营数据仍以飞书播报为准。CNY口径，0.9／0.85各执行一次。</p>`;
+}
+
 function periodCoverage(gs){
  renderWeeklyDifferences();
  const p=selectedPeriod(),kind=p?.kind||'week',cutoffs=gs.map(g=>g.manager+' '+(kind==='week'?g.weekly_cutoff:g.monthly_cutoff||'待接入')).join('；');
@@ -199,7 +220,7 @@ function periodCoverage(gs){
   if(W.differences?.start===p.start&&W.differences?.recovery){
    const r=W.differences.recovery;
    if(selectedObservation()){
-    const o=selectedObservation();$('periodCoverage').textContent='所选周 '+p.start+' — '+p.end+'：部分已核验／非正式完整业绩。金额对账通过（对账差单列待核），部门覆盖校验未通过；已确认金额见周观察。上一完整周 '+(o.reference_week?o.reference_week.start+' — '+o.reference_week.end:'暂无')+'，保留原有效快照。';return;
+    const o=selectedObservation();$('periodCoverage').textContent='所选周 '+p.start+' — '+p.end+'：已确认金额·覆盖待核验。部门覆盖校验未通过；上一完整周 '+(o.reference_week?o.reference_week.start+' — '+o.reference_week.end:'暂无')+'。覆盖缺口详见指标下方折叠说明。';return;
    }
    $('periodCoverage').textContent='所选完整周 '+p.start+' — '+p.end+'。全周ERP原始数据 '+num(r.full_source_rows)+' 条已完整留存、行数及去重校验通过。'+(dept&&!dept.retained_previous?'已确认归属指标已发布。':'部门与负责人归属校验未通过，本周正式指标暂不发布。')+' 上一有效周截止：'+cutoffs+'。';
    return;
@@ -270,7 +291,7 @@ function cardScope(g,tab){
  return g;
 }
 function render(){
- refreshPeriodOptions();renderWeeklyObservation();periodCoverage(groups());countryCoverage();
+ refreshPeriodOptions();renderWeeklyCoverageDetails();periodCoverage(groups());countryCoverage();
  const warningActive=tab==='warnings';
  for(const id of ['metrics','cardsPanel','alertsPanel'])$(id).hidden=warningActive;
  document.querySelector('footer').hidden=warningActive;
@@ -281,12 +302,13 @@ for(const g of D.groups)if(g.report_verified)g.stale=Boolean(g.stale||g.weekly_c
  $('freshness').innerHTML=`${published}/${gs.length}组报表已核验 · ${!published?'等待数据发布':scoped.some(g=>g.stale)?'存在过期数据':'上一完整周'}<br>汇总生成 ${esc(((tab==='price'?D.pricing_updated_at:null)||D.generated_at||'').slice(0,19).replace('T',' '))} 北京时间`;
  $('notice').textContent=tab==='all'?`展示可明确归属的真实经营金额。${pending?'该周期仍有共管记录待分配，未计入下列金额。':'跨组汇总按同一实际周期计算。'} 部分月不与完整月直接比较。`:tab==='price'?'机会与执行状态为本次刷新快照；经营周期筛选不回溯重建历史分层。理论增量为模型情景，与已验证净毛利分开展示。':'按产品实际退出状态识别所有负责人；库存是ERP查询时快照。缺少确认的库存占用金额、清仓活动业绩与清理进度留空。';
  if(selectedObservation()){
-  $('freshness').innerHTML='周观察截至 '+esc(selectedObservation().end)+' · 部分已核验<br>正式周快照截止 '+esc(W.weekly_cutoff)+'；各负责人完整性状态保持独立。';
-  $('notice').textContent='上方是已确认金额的最新周观察。下方正式指标、趋势、部门目标及个人绩效不使用观察金额；部门已确认但个人暂挂的金额已在观察小计内保留。';
+  $('freshness').innerHTML='已确认周数据截至 '+esc(selectedObservation().end)+' · 覆盖待核验<br>上一完整周快照截止 '+esc(W.weekly_cutoff)+'；各负责人完整性状态保持独立。';
+  $('notice').textContent='已确认金额仅作经营观察，不用于正式部门目标完成率、个人绩效和自动结论；月度正式经营数据仍以飞书播报为准。';
  }
  let html='';if(tab==='all'){const prev=p0?.end?OperatingCalendar.previous(p0).id:null,b=prev?totals(gs,prev):{};const partial=p0?.kind==='month'&&new Date(new Date(p0.end+'T12:00:00Z').getTime()+86400000).getUTCDate()!==1;const wow=partial||m.orderProductSales==null||b.orderProductSales==null?null:ratio(m.orderProductSales-b.orderProductSales,Math.abs(b.orderProductSales));html=metric('调整后销售额 · CNY',money(m.orderProductSales),(partial?'部分月，环比不比较':'销售额环比 '+pct(wow)))+metric('调整后净毛利 · CNY',money(m.salesNetProfit),'已包含广告及促销费用')+metric('调整后净毛利率',pct(m.margin),'合计净毛利 / 合计销售额')+metric('平均成交单价 · CNY',money(m.asp),'实际成交额 / 销量')+metric('广告费用率',pct(m.ad_rate),'广告 / ERP原始销售额')+metric('销量',num(m.unitsOrdered),'ERP真实子体销量');}
  else if(tab==='price'){const a=sum(ops.map(o=>o&&({a:o.grades.A!=null&&o.grades.B!=null?o.grades.A+o.grades.B:null})),'a');html=metric('A / B级机会SKU',num(a),'全部符合条件SKU，无数量上限')+metric('待核验SKU',num(sum(ops,'pending_verification')),'候选资格与执行资格分开')+metric('已核验待提价',num(sum(ops,'ready_count')),'六项核验与错峰排期均通过')+metric('测试中SKU',num(sum(ops,'active_count')),'已有测试不重复派发')+metric('理论14天增量 · CNY',money(sum(ops,'theoretical_increment_cny')),'预测：销量下降2%情景')+metric('已验证增量 · CNY',money(verifiedExecutionTotal(ops)),'需可比对照、证据及运营确认');}
  else html=metric('待淘汰SKU',num(sum(ops,'exit_skus')),'基于产品实际状态')+metric('待清理FBA库存',num(sum(ops,'exit_stock_qty')),'ERP查询时库存快照')+metric('库存占用金额 · CNY','—','字段估值范围待核验')+metric('ERP滞销库存',num(sum(ops,'unsalable_qty')),'原字段 unsalableQuantity')+metric('已确认进度记录',num(sum(ops,'confirmed_cleanup_records')),'无人工确认不计算进度')+metric('28天未推进',num(sum(ops,'no_progress_28d')),'仅对已登记最近推进日判断');
+ if(selectedObservation())html=confirmedMetricCards();
  $('metrics').innerHTML=html;if(tab!=='all')$('metrics').querySelectorAll('h3').forEach(h=>h.textContent+=' · 快照');$('trendPanel').style.display=tab==='all'?'':'none';renderModuleHeaders(gs,id);
  $('cards').innerHTML=gs.map(g=>{const v=cardScope(g,tab),x=period(g,id)||{},o=op(g),link=g.report_verified?`<a href="${esc(g.report_url)}" target="_blank" rel="noopener">${esc(g.manager)} ↗</a>`:esc(g.manager)+' · 未配置';let pairs=tab==='all'?[['调整后销售额',money(x.orderProductSales)],['调整后净毛利',money(x.salesNetProfit)],['调整后净毛利率',pct(x.margin)],['广告费率',pct(x.ad_rate)]]:tab==='price'?[['A / B / C / D',o?['A','B','C','D'].map(k=>num(o.grades[k])).join(' / '):'—'],['待提价',num(o?.ready_count)],['新增机会',num(o?.new_candidates)],['已完成 / 成功率',num(o?.completed_count)+' / '+pct(o?.success_rate)]]:[['待淘汰SKU',num(o?.exit_skus)],['FBA库存',num(o?.exit_stock_qty)],['清理进度','待运营确认'],['清仓活动业绩','待接入']];return `<article class="card"><h3>${link}</h3>${tab==='all'&&!period(g,id)?'<p class="subtle">该周期暂无完整数据</p>':''}<div class="status ${!v.report_verified||v.stale?'warn':''}">${esc(v.stale&&!v.refresh_failed?'数据过期':v.status||'未发布')}</div><dl>${pairs.map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl><div class="note">周 ${v.weekly_complete??0}/12 · 月 ${v.monthly_coverage??0}/6（含部分月）<br>周截止 ${esc(v.weekly_cutoff||'—')} · 月截止 ${esc(v.monthly_cutoff||'—')}<br>Excel周/月诊断保留ERP原始口径</div></article>`}).join('');
  const alerts=[];for(const g of gs){const o=op(g),view=cardScope(g,tab);if(!view.report_verified||view.stale)alerts.push([g.manager,g.report_verified?'数据已过期，刷新失败时仍保留上一有效报表。':'报表未发布，指标不参与正式汇总。']);if(g.weekly_complete<12)alerts.push([g.manager,`完整周仅${g.weekly_complete}/12，缺失数据未用月均摊填充。`]);if(o){if(o.pending_verification)alerts.push([g.manager,`${o.pending_verification}个候选待运营核验；${o.overdue_execution}项排期逾期，${o.overdue_review}项需复盘。`]);if(o.exit_skus)alerts.push([g.manager,`${o.exit_skus}个退出SKU；${o.confirmed_cleanup_records}条进度已确认，其余等待运营登记。`]);if(o.active_count===0&&tab==='price')alerts.push([g.manager,'尚无确认启动的实际测试；历史预填计划不计入测试成果。']);}}
@@ -294,7 +316,7 @@ for(const g of D.groups)if(g.report_verified)g.stale=Boolean(g.stale||g.weekly_c
  $('foot').innerHTML=`规则 ${esc(D.rule_version||'未发布')}<br>${esc(D.hosting||'本机预览')}<br>时间 ${esc(p0?.start||'—')} — ${esc(p0?.end||'—')}`;if(tab==='all')chart(gs);}
 function chart(gs){const selected=selectedPeriod(),kind=selected?.kind||'week',ps=selected?.end?OperatingCalendar.trend(selected):[],rows=ps.map(p=>totals(gs,p.id)),actualEnd=ps.filter((p,i)=>rows[i].orderProductSales!=null&&rows[i].salesNetProfit!=null).at(-1)?.end;$('trendDate').textContent=actualEnd?'实际经营截止 '+actualEnd:'该周期范围暂无完整数据';$('trendDescription').textContent=ps.length?'所选趋势区间截至'+ps[ps.length-1].end+'的最近'+ps.length+(kind==='month'?'个月（部分月单独标记）':'个完整自然周'):'所选周期无已缓存趋势';$('trendDescription').textContent+=' · 调整后销售额与净毛利（人民币）；缺失周期显示断点。';if(!ps.length){$('chart').innerHTML='<div class="empty">该历史周期没有已缓存的真实周度数据</div>';return}const vals=rows.flatMap(x=>[x.orderProductSales,x.salesNetProfit]).filter(x=>x!=null),min=Math.min(0,...vals),max=Math.max(1,...vals),range=max-min||1,W=1180,H=225,L=70,R=15,T=12,B=33,y=v=>T+(max-v)/range*(H-T-B),x=i=>L+i*(W-L-R)/Math.max(1,ps.length-1);let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="所选周期调整后销售额与净毛利趋势">`;for(let i=0;i<4;i++){const v=min+range*i/3;svg+=`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="#e9edf2"/><text x="${L-10}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#8a98a7">${money(v)}</text>`}for(const [f,c] of [['orderProductSales','#2458ca'],['salesNetProfit','#119a89']]){let d='',open=false;rows.forEach((r,i)=>{if(r[f]==null){open=false;return}d+=(open?'L':'M')+x(i)+','+y(r[f])+' ';open=true;svg+=`<circle cx="${x(i)}" cy="${y(r[f])}" r="3" fill="${c}"><title>${ps[i].start} — ${ps[i].end} ${f==='orderProductSales'?'调整后销售额':'调整后净毛利'} ¥${num(r[f],2)}</title></circle>`});svg+=`<path d="${d}" fill="none" stroke="${c}" stroke-width="2.5"/>`}ps.forEach((p,i)=>svg+=`<text x="${x(i)}" y="${H-7}" text-anchor="middle" font-size="11" fill="#8a98a7">${kind==='month'?p.start.slice(0,7)+(new Date(new Date(p.end+'T12:00:00Z').getTime()+86400000).getUTCDate()!==1?'*':''):p.start.slice(5)}</text>`);$('chart').innerHTML=svg+'</svg>'}
 options();for(const id of ['manager','site','period'])$(id).addEventListener('change',render);document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.tab;document.querySelectorAll('nav button').forEach(n=>n.classList.toggle('active',n===b));render()}));render();
-function periodNotes(){if(tab!=='all')return;const gs=groups(),id=$('period').value,p=selectedPeriod();if(!p?.end)return;const partial=p.kind==='month'&&new Date(new Date(p.end+'T12:00:00Z').getTime()+86400000).getUTCDate()!==1;const prev=OperatingCalendar.previous(p);const comparable=!partial&&prev&&gs.every(g=>{const a=matchedPeriod(g,id),b=matchedPeriod(g,prev.id);return (period(g,id)||countryEmpty(g,id))&&(period(g,prev.id)||countryEmpty(g,prev.id))&&!a.joint_pending&&!b.joint_pending});const a=totals(gs,id),b=prev?totals(gs,prev.id):{};const fields=['orderProductSales','salesNetProfit','margin','asp','ad_rate','unitsOrdered'];document.querySelectorAll('#metrics .metric small').forEach((n,i)=>{const f=fields[i],diff=a[f]!=null&&b[f]!=null?(a[f]-b[f]):null;const v=['margin','ad_rate'].includes(f)?(diff==null?'—':num(diff*100,1)+'个百分点'):pct(diff!=null&&b[f]?diff/Math.abs(b[f]):null);n.textContent=!comparable?(partial?'部分月；不与完整月直接比较':'缺可比归属基线；环比留空'):(p.kind==='week'?'周环比 ':'月环比 ')+v});}
+function periodNotes(){if(tab!=='all'||selectedObservation())return;const gs=groups(),id=$('period').value,p=selectedPeriod();if(!p?.end)return;const partial=p.kind==='month'&&new Date(new Date(p.end+'T12:00:00Z').getTime()+86400000).getUTCDate()!==1;const prev=OperatingCalendar.previous(p);const comparable=!partial&&prev&&gs.every(g=>{const a=matchedPeriod(g,id),b=matchedPeriod(g,prev.id);return (period(g,id)||countryEmpty(g,id))&&(period(g,prev.id)||countryEmpty(g,prev.id))&&!a.joint_pending&&!b.joint_pending});const a=totals(gs,id),b=prev?totals(gs,prev.id):{};const fields=['orderProductSales','salesNetProfit','margin','asp','ad_rate','unitsOrdered'];document.querySelectorAll('#metrics .metric small').forEach((n,i)=>{const f=fields[i],diff=a[f]!=null&&b[f]!=null?(a[f]-b[f]):null;const v=['margin','ad_rate'].includes(f)?(diff==null?'—':num(diff*100,1)+'个百分点'):pct(diff!=null&&b[f]?diff/Math.abs(b[f]):null);n.textContent=!comparable?(partial?'部分月；不与完整月直接比较':'缺可比归属基线；环比留空'):(p.kind==='week'?'周环比 ':'月环比 ')+v});}
 function trendAlerts(){if(tab!=='all')return;const id=$('period').value;for(const g of groups()){const p=matchedPeriod(g,id);if(!period(g,id)||!p||p.kind!=='week')continue;const series=(g.periods||[]).filter(x=>x.kind==='week'&&x.end<=p.end).sort((a,b)=>b.end.localeCompare(a.end));let tags=[];for(const [f,label]of [['orderProductSales','销售额'],['unitsOrdered','销量'],['salesNetProfit','净毛利']]){let streak=0;for(let i=0;i<4;i++){const a=series[i]&&period(g,series[i].id),b=series[i+1]&&period(g,series[i+1].id);if(!a||!b||series[i].joint_pending||series[i+1].joint_pending||a[f]==null||b[f]==null||b[f]===0||a[f]>=b[f]||new Date(series[i].start)-new Date(series[i+1].start)!==604800000)break;streak++}if(streak>=2)tags.push(label+'连续'+streak+'周下滑')}const m=period(g,id);if(m?.salesNetProfit<0)tags.push('本周净毛利为负');if(m?.ad_rate>.3)tags.push('广告费用率超过30%');if(tags.length){const e=document.createElement('div');e.className='alert';e.innerHTML='<strong>'+esc(g.manager)+'</strong><span>'+esc(tags.join('；'))+'</span>';$('alerts').append(e)}}}
 for(const id of ['manager','site','period'])$(id).addEventListener('change',()=>{periodNotes();trendAlerts()});document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{periodNotes();trendAlerts()}));periodNotes();trendAlerts();
 function exitPerformance(){if(tab!=='exit')return;const id=$('period').value;const rows=groups().filter(g=>!countryEmpty(g,id,true)).map(g=>{const p=matchedPeriod(g,id),row=$('site').value==='all'?p?.exit_cohort_metrics:OperatingCountries.financial(p?.site_exit_cohort_metrics,$('site').value,r=>completeMetrics(r,p));return g.report_verified&&completeMetrics(row,p)?displayMetrics(row):null});$('metrics').insertAdjacentHTML('beforeend',metric('退出产品调整后销售额 · CNY',money(sum(rows,'orderProductSales')),'当前退出产品集合，非清仓活动归因')+metric('退出产品调整后净毛利 · CNY',money(sum(rows,'salesNetProfit')),'选定经营周期的真实结果'));}
