@@ -42,5 +42,10 @@ weekly.differences={start:'2026-10-19',end:'2026-10-25',department_confirmed_una
 inputs.period.value='week_2026-10-19_2026-10-25_CNY';evaluate('renderWeeklyDifferences()');
 assert.equal(differenceBox.hidden,false);assert(differenceBox.textContent.includes('1,212.00'));assert(differenceBox.textContent.includes('47.46'));
 assert(differenceBox.textContent.includes('月累计金额不能替代周金额'));assert.equal(evaluate("totals(D.groups,$('period').value).orderProductSales==null"),true);
+weekly.issues=[{start:'2026-10-19',reason:'full_week_captured_department_attribution_pending:378'}];
+weekly.differences.recovery={full_source_rows:7755,no_asin_rows_retained:103,no_asin_types:{virtual_msku:97,other_or_account_adjustment:6},department_unverified_excluded:{records:378},reason_counts:{cross_department_joint:32}};
+inputs.periodCoverage={textContent:''};evaluate('renderWeeklyDifferences();periodCoverage(D.groups)');
+assert(differenceBox.textContent.includes('7,755'));assert(differenceBox.textContent.includes('跨部门共管32'));
+assert(inputs.periodCoverage.textContent.includes('归属校验未通过'));assert.equal(evaluate("totals(D.groups,$('period').value).orderProductSales==null"),true);
 evaluate("tab='price';renderWeeklyDifferences()");assert.equal(differenceBox.hidden,true);
 console.log('Shared weeks: incomplete latest hidden, previous retained, independent pricing, daily MTD once-only amounts and missing country/volume fields passed.');

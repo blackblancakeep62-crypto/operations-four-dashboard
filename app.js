@@ -178,6 +178,11 @@ function periodCoverage(gs){
   const dept=W.department_periods.find(x=>x.start===p.start&&x.end===p.end),count=gs.filter(g=>period(g,$('period').value)||countryEmpty(g,$('period').value)).length;
   const gaps=W.issues.filter(i=>i.start===p.start&&(!i.manager||gs.some(g=>g.manager===i.manager)));
   const missing=gaps.some(i=>i.reason.startsWith('source_excluded_rows_unverified:'));
+  if(W.differences?.start===p.start&&W.differences?.recovery){
+   const r=W.differences.recovery;
+   $('periodCoverage').textContent='所选完整周 '+p.start+' — '+p.end+'。全周ERP原始数据 '+num(r.full_source_rows)+' 条已完整留存、行数及去重校验通过。'+(dept&&!dept.retained_previous?'已确认归属指标已发布。':'部门与负责人归属校验未通过，本周正式指标暂不发布。')+' 上一有效周截止：'+cutoffs+'。';
+   return;
+  }
   $('periodCoverage').textContent='所选完整周 '+p.start+' — '+p.end+'。'+(dept&&$('manager').value==='all'?(dept.retained_previous?'保留原已发布范围的快照，未重新认证部门全量。':'部门数据已核验；共管记录仅在部门计入一次，个人不拆分。'):'')+'负责人'+(dept?.retained_previous?'原快照覆盖 ':'完整覆盖 ')+count+'/'+gs.length+'。'+(gaps.length?(missing?'原缓存存在未留存明细的无 ASIN 记录，无法确认部门完整范围；新增周指标暂不发布。':'存在待核归属或取数缺口，本周缺失指标暂不发布。'):'')+' 上一有效周截止：'+cutoffs+'。';
   return;
  }
@@ -196,6 +201,11 @@ function renderWeeklyDifferences(){
  box.hidden=tab!=='all'||p?.kind!=='week'||d?.start!==p.start||d?.end!==p.end;
  if(box.hidden)return;
  const u=d.department_confirmed_unassigned,ref=d.reference,parts=[];
+ if(d.recovery){
+  const r=d.recovery,counts=r.reason_counts||{};
+  box.textContent=`本周完整共享源：${num(r.full_source_rows)}条，含无ASIN记录${num(r.no_asin_rows_retained)}条（虚拟MSKU ${num(r.no_asin_types?.virtual_msku)}条、其他或账号调整${num(r.no_asin_types?.other_or_account_adjustment)}条），原始字段全部保留。部门归属待核${num(r.department_unverified_excluded?.records)}条，其中跨部门共管${num(counts.cross_department_joint||0)}条，均不强行分配或计入正式部门业绩。未归属负责人（部门已确认、个人未分配）${num(u?.records)}条，原始销售额 ¥${num(u?.raw_sales,2)}、净毛利 ¥${num(u?.raw_net_profit,2)}；整体校验未通过前仅作为差异说明。历史48条分类及映射结果已归档保留，不再用不完整缓存推算整周金额。`;
+  return;
+ }
  if(u?.records)parts.push(`未归属负责人（部门归属已确认，个人未分配）：${u.records}条，ERP原始销售额 ¥${num(u.raw_sales,2)}、原始净毛利 ¥${num(u.raw_net_profit,2)}。`+(u.formal_week_inclusion?'已在部门计入一次，不重复加到个人。':'本周整体校验未通过，暂未计入正式周指标。'));
  if(ref){const c=ref.classification||{},four=c.department_confirmed_mapping_missing,other=c.other_manager_mapping,unknown=c.department_unverified;
   parts.push(`无ASIN对照：${ref.measurement_start}—${ref.measurement_end}月累计缓存含${ref.records}条虚拟MSKU、零销售负利润记录；四组产品映射${four?.records||0}条、净毛利 ¥${num(four?.raw_net_profit,2)}；其他负责人映射${other?.records||0}条、¥${num(other?.raw_net_profit,2)}；部门待核${unknown?.records||0}条、¥${num(unknown?.raw_net_profit,2)}。具体费用类型及本周原始金额未核实，月累计金额不能替代周金额。`);
