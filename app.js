@@ -203,6 +203,11 @@ function renderWeeklyDifferences(){
  const u=d.department_confirmed_unassigned,ref=d.reference,parts=[];
  if(d.recovery){
   const r=d.recovery,counts=r.reason_counts||{};
+  if(r.ownership_review&&r.monetary_validation){
+   const o=r.ownership_review,m=r.monetary_validation,c=o.joint_contributions||{},x=c.department_unconfirmed?.amounts||{};
+   box.textContent=`完整共享源${num(r.full_source_rows)}条。跨部门共管${num(o.joint_source_records)}条中，${num(o.joint_msku_reconciled)}条已完成跨账号MSKU金额勾稽；${num(o.joint_outcome_counts?.personal_resolved||0)}条完成个人归属，其余保留待核。已明确归属四组个人的原始销售额 ¥${num(c.personal?.amounts?.orderProductSales,2)}、净利润 ¥${num(c.personal?.amounts?.salesNetProfit,2)}；共管中部门仍待核部分销售额 ¥${num(x.orderProductSales,2)}、净利润 ¥${num(x.salesNetProfit,2)}。未归属负责人（部门已确认）${num(u?.records)}条，销售额 ¥${num(u?.raw_sales,2)}、净利润 ¥${num(u?.raw_net_profit,2)}。全源金额分区勾稽${m.source_amount_partition_passed?'通过':'未通过'}；部门归属仍有${num(m.financially_nonzero_unconfirmed_records)}条非零记录待核，销售额 ¥${num(m.unconfirmed?.raw_sales,2)}、净利润 ¥${num(m.unconfirmed?.raw_net_profit,2)}，此为待核范围，不能当作四组业绩。ASIN/MSKU净利润舍入差 ¥${num(o.rounding_amounts?.salesNetProfit,2)}另列留存。本周正式指标${d.department_complete?'已通过校验':'暂不发布，保留上一有效周'}。`;
+   return;
+  }
   box.textContent=`本周完整共享源：${num(r.full_source_rows)}条，含无ASIN记录${num(r.no_asin_rows_retained)}条（虚拟MSKU ${num(r.no_asin_types?.virtual_msku)}条、其他或账号调整${num(r.no_asin_types?.other_or_account_adjustment)}条），原始字段全部保留。部门归属待核${num(r.department_unverified_excluded?.records)}条，其中跨部门共管${num(counts.cross_department_joint||0)}条，均不强行分配或计入正式部门业绩。未归属负责人（部门已确认、个人未分配）${num(u?.records)}条，原始销售额 ¥${num(u?.raw_sales,2)}、净毛利 ¥${num(u?.raw_net_profit,2)}；整体校验未通过前仅作为差异说明。历史48条分类及映射结果已归档保留，不再用不完整缓存推算整周金额。`;
   return;
  }

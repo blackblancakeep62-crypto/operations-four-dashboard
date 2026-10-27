@@ -47,5 +47,9 @@ weekly.differences.recovery={full_source_rows:7755,no_asin_rows_retained:103,no_
 inputs.periodCoverage={textContent:''};evaluate('renderWeeklyDifferences();periodCoverage(D.groups)');
 assert(differenceBox.textContent.includes('7,755'));assert(differenceBox.textContent.includes('跨部门共管32'));
 assert(inputs.periodCoverage.textContent.includes('归属校验未通过'));assert.equal(evaluate("totals(D.groups,$('period').value).orderProductSales==null"),true);
+weekly.differences.recovery.ownership_review={joint_source_records:32,joint_msku_reconciled:25,joint_outcome_counts:{personal_resolved:22},joint_contributions:{personal:{amounts:{orderProductSales:26378.23,salesNetProfit:4371.97}},department_unconfirmed:{amounts:{orderProductSales:1190.91,salesNetProfit:-347.55}}},rounding_amounts:{salesNetProfit:-.09}};
+weekly.differences.recovery.monetary_validation={source_amount_partition_passed:true,financially_nonzero_unconfirmed_records:222,unconfirmed:{raw_sales:98287.85,raw_net_profit:23131.82}};
+evaluate('renderWeeklyDifferences()');
+assert(differenceBox.textContent.includes('25条已完成'));assert(differenceBox.textContent.includes('26,378.23'));assert(differenceBox.textContent.includes('暂不发布'));assert(differenceBox.textContent.includes('不能当作四组业绩'));
 evaluate("tab='price';renderWeeklyDifferences()");assert.equal(differenceBox.hidden,true);
 console.log('Shared weeks: incomplete latest hidden, previous retained, independent pricing, daily MTD once-only amounts and missing country/volume fields passed.');
