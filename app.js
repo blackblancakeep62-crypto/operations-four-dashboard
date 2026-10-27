@@ -1,5 +1,19 @@
 'use strict';
-const D=window.OPERATIONS_DATA||{groups:[]}, $=id=>document.getElementById(id);let tab='all';
+const D=structuredClone(window.OPERATIONS_DATA||{groups:[]}), $=id=>document.getElementById(id);let tab='all';
+let W=window.SNAPSHOT_GUARD.restore('weekly_business',window.WEEKLY_BUSINESS_DATA||null);
+function applyBusinessWeeks(){
+ if(!W)return;
+ for(const g of D.groups){const b=W.groups[g.manager];if(!b)continue;
+  for(const key of ['asof','weekly_cutoff','monthly_cutoff','weekly_complete','monthly_coverage'])if(g['pricing_'+key]==null)g['pricing_'+key]=g[key];
+  g.pricing_report_verified=g.pricing_report_verified??g.report_verified;
+  g.periods=[...(g.periods||[]).filter(p=>p.kind!=='week'),...b.periods.map(p=>({...g.periods?.find(x=>x.kind==='week'&&x.start===p.start&&x.end===p.end),...p}))];
+  g.weekly_cutoff=b.weekly_cutoff;g.weekly_complete=b.weekly_complete;
+  g.stale=!b.latest_complete;g.refresh_failed=false;
+  g.status=b.latest_complete?'周经营数据已核验':'本周数据待核，保留上一有效周';
+ }
+ D.generated_at=W.generated_at;
+}
+applyBusinessWeeks();
 // BEGIN SHARED COUNTRIES: fixed public component; source account keys stay unchanged.
 const OperatingCountries=(()=>{
  const names={US:'美国',UK:'英国',DE:'德国',FR:'法国',IT:'意大利',ES:'西班牙',CA:'加拿大',MX:'墨西哥',BR:'巴西',BE:'比利时',IE:'爱尔兰',NL:'荷兰',PL:'波兰',SE:'瑞典',IN:'印度',JP:'日本',AU:'澳大利亚',SG:'新加坡',AE:'阿联酋',SA:'沙特阿拉伯',TR:'土耳其',ZA:'南非',EG:'埃及'};
@@ -142,15 +156,30 @@ function initPeriodSelector(){
 }
 function matchedPeriod(g,id){
  const wanted=OperatingCalendar.parse(id);if(!wanted?.end)return null;
+ if(tab==='all'&&wanted.kind==='month'&&wanted.start.slice(0,7)===OperatingCalendar.today().slice(0,7)){
+  const actual=window.OPERATIONS_TARGETS?.personal?.[wanted.start.slice(0,7)]?.[g.manager]?.actual;
+  if(!actual||actual.start!==wanted.start||actual.cutoff!==wanted.end||actual.basis!=='adjusted_once_from_raw_erp'||Math.abs(actual.sales-actual.raw_sales*.9)>.011||Math.abs(actual.net_profit-actual.raw_net_profit*.85)>.011)return null;
+  return {...wanted,daily:true,joint_pending:actual.joint_pending,metrics:{status:'verified',source_start:actual.start,source_end:actual.cutoff,
+   orderProductSales:actual.raw_sales,salesNetProfit:actual.raw_net_profit,adsSpend:Math.abs(actual.raw_signed_ads),
+   adjusted_sales_cny:actual.sales,adjusted_net_profit_cny:actual.net_profit,adjusted_net_margin:actual.net_margin,
+   discountCostSales:null,unitsOrdered:null,ad_rate:actual.ad_burden}};
+ }
  return (g.periods||[]).find(p=>p.kind===wanted.kind&&p.start===wanted.start&&p.end===wanted.end)||null;
 }
 function completeMetrics(row,p){
  if(!row||!p||row.complete===false||p.complete===false||(row.status&&row.status!=='verified'))return false;
  if(row.source_start&&row.source_start!==p.start||row.source_end&&row.source_end!==p.end)return false;
- return ['orderProductSales','discountCostSales','unitsOrdered','salesNetProfit','adsSpend','adjusted_sales_cny','adjusted_net_profit_cny'].every(k=>typeof row[k]==='number'&&Number.isFinite(row[k]));
+ return (p.daily?['orderProductSales','salesNetProfit','adsSpend','adjusted_sales_cny','adjusted_net_profit_cny']:['orderProductSales','discountCostSales','unitsOrdered','salesNetProfit','adsSpend','adjusted_sales_cny','adjusted_net_profit_cny']).every(k=>typeof row[k]==='number'&&Number.isFinite(row[k]));
 }
 function periodCoverage(gs){
  const p=selectedPeriod(),kind=p?.kind||'week',cutoffs=gs.map(g=>g.manager+' '+(kind==='week'?g.weekly_cutoff:g.monthly_cutoff||'待接入')).join('；');
+ if(tab==='all'&&W&&kind==='week'){
+  const dept=W.department_periods.find(x=>x.start===p.start&&x.end===p.end),count=gs.filter(g=>period(g,$('period').value)||countryEmpty(g,$('period').value)).length;
+  const gaps=W.issues.filter(i=>i.start===p.start&&(!i.manager||gs.some(g=>g.manager===i.manager)));
+  const missing=gaps.some(i=>i.reason.startsWith('source_excluded_rows_unverified:'));
+  $('periodCoverage').textContent='所选完整周 '+p.start+' — '+p.end+'。'+(dept&&$('manager').value==='all'?(dept.retained_previous?'保留原已发布范围的快照，未重新认证部门全量。':'部门数据已核验；共管记录仅在部门计入一次，个人不拆分。'):'')+'负责人'+(dept?.retained_previous?'原快照覆盖 ':'完整覆盖 ')+count+'/'+gs.length+'。'+(gaps.length?(missing?'原缓存存在未留存明细的无 ASIN 记录，无法确认部门完整范围；新增周指标暂不发布。':'存在待核归属或取数缺口，本周缺失指标暂不发布。'):'')+' 上一有效周截止：'+cutoffs+'。';
+  return;
+ }
  const selected='所选周期 '+(p?p.start+' — '+(p.end||'暂无完整自然日'):'待选择')+'。';
  if(tab==='all'){
   const any=gs.some(g=>period(g,$('period').value)),count=any?gs.filter(g=>period(g,$('period').value)||countryEmpty(g,$('period').value)).length:0;
@@ -170,10 +199,26 @@ function groups(){return D.groups.filter(g=>$('manager').value==='all'||g.manage
 function displayMetrics(m){return m&&{...m,erp_orderProductSales:m.orderProductSales,orderProductSales:m.adjusted_sales_cny??null,salesNetProfit:m.adjusted_net_profit_cny??null,margin:m.adjusted_net_margin??null}}
 function period(g,id){const p=matchedPeriod(g,id),row=$('site').value==='all'?p?.metrics:OperatingCountries.financial(p?.sites,$('site').value,r=>completeMetrics(r,p));return g.report_verified&&completeMetrics(row,p)?displayMetrics(row):null;}
 function op(g){return $('site').value==='all'?g.operational:OperatingCountries.operational(g.site_operational,$('site').value);}
-function totals(gs,id){const rows=gs.filter(g=>!countryEmpty(g,id)).map(g=>period(g,id));let x={};for(const f of ['orderProductSales','erp_orderProductSales','discountCostSales','unitsOrdered','salesNetProfit','adsSpend'])x[f]=sum(rows,f);x.asp=ratio(x.discountCostSales,x.unitsOrdered);x.margin=ratio(x.salesNetProfit,x.orderProductSales);x.ad_rate=ratio(x.adsSpend,x.erp_orderProductSales);return x}
+function totals(gs,id){
+ const wanted=OperatingCalendar.parse(id);
+ if(W&&wanted?.kind==='week'&&$('manager').value==='all'){
+  const p=W.department_periods.find(p=>p.start===wanted.start&&p.end===wanted.end);
+  const raw=$('site').value==='all'?p?.metrics:OperatingCountries.financial(p?.sites,$('site').value,r=>completeMetrics(r,p));
+  if(!completeMetrics(raw,p))return {};
+  return displayMetrics(raw);
+ }
+ const rows=gs.filter(g=>!countryEmpty(g,id)).map(g=>period(g,id));let x={};for(const f of ['orderProductSales','erp_orderProductSales','discountCostSales','unitsOrdered','salesNetProfit','adsSpend'])x[f]=sum(rows,f);x.asp=ratio(x.discountCostSales,x.unitsOrdered);x.margin=ratio(x.salesNetProfit,x.orderProductSales);x.ad_rate=ratio(x.adsSpend,x.erp_orderProductSales);return x
+}
 function options(){for(const g of D.groups)$('manager').add(new Option(g.manager,g.manager));initCountrySelector();initPeriodSelector();}
 function expectedWeeklyCutoff(now=new Date()){return OperatingCalendar.weeklyCutoff(now);}
-function cardScope(g,tab){return tab==='price'&&g.pricing_report_verified?{...g,asof:g.pricing_asof,weekly_cutoff:g.pricing_weekly_cutoff,monthly_cutoff:g.pricing_monthly_cutoff,weekly_complete:g.pricing_weekly_complete,monthly_coverage:g.pricing_monthly_coverage,stale:g.pricing_weekly_cutoff<expectedWeeklyCutoff(),refresh_failed:false,status:'已核验发布'}:g;}
+function cardScope(g,tab){
+ if(tab==='price'&&g.pricing_report_verified)return {...g,asof:g.pricing_asof,weekly_cutoff:g.pricing_weekly_cutoff,monthly_cutoff:g.pricing_monthly_cutoff,weekly_complete:g.pricing_weekly_complete,monthly_coverage:g.pricing_monthly_coverage,stale:g.pricing_weekly_cutoff<expectedWeeklyCutoff(),refresh_failed:false,status:'已核验发布'};
+ if(tab==='all'&&typeof selectedPeriod==='function'&&selectedPeriod()?.kind==='month'){
+  const p=matchedPeriod(g,$('period').value);
+  if(p?.daily)return {...g,monthly_cutoff:p.end,stale:false,refresh_failed:false,status:p.joint_pending?'每日播报已同步；共管未分配':'每日播报已同步'};
+ }
+ return g;
+}
 function render(){
  refreshPeriodOptions();periodCoverage(groups());countryCoverage();
  const warningActive=tab==='warnings';
@@ -200,7 +245,7 @@ function trendAlerts(){if(tab!=='all')return;const id=$('period').value;for(cons
 for(const id of ['manager','site','period'])$(id).addEventListener('change',()=>{periodNotes();trendAlerts()});document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{periodNotes();trendAlerts()}));periodNotes();trendAlerts();
 function exitPerformance(){if(tab!=='exit')return;const id=$('period').value;const rows=groups().filter(g=>!countryEmpty(g,id,true)).map(g=>{const p=matchedPeriod(g,id),row=$('site').value==='all'?p?.exit_cohort_metrics:OperatingCountries.financial(p?.site_exit_cohort_metrics,$('site').value,r=>completeMetrics(r,p));return g.report_verified&&completeMetrics(row,p)?displayMetrics(row):null});$('metrics').insertAdjacentHTML('beforeend',metric('退出产品调整后销售额 · CNY',money(sum(rows,'orderProductSales')),'当前退出产品集合，非清仓活动归因')+metric('退出产品调整后净毛利 · CNY',money(sum(rows,'salesNetProfit')),'选定经营周期的真实结果'));}
 for(const id of ['manager','site','period'])$(id).addEventListener('change',exitPerformance);document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',exitPerformance));
-if(location.protocol==='http:'||location.protocol==='https:')setInterval(async()=>{try{const r=await fetch('summary.json?t='+Date.now(),{cache:'no-store'});if(r.ok&&(await r.json()).generated_at!==D.generated_at)location.reload()}catch{}finally{render();periodNotes();trendAlerts();exitPerformance()}},60000);
+ if(location.protocol==='http:'||location.protocol==='https:')setInterval(async()=>{try{const r=await fetch('summary.json?t='+Date.now(),{cache:'no-store'});if(r.ok&&(await r.json()).pricing_updated_at!==D.pricing_updated_at)location.reload();const b=await fetch('weekly-business.json?t='+Date.now(),{cache:'no-store'});if(b.ok){W=window.SNAPSHOT_GUARD.accept('weekly_business',await b.json());applyBusinessWeeks();}}catch{}finally{render();periodNotes();trendAlerts();exitPerformance()}},60000);
 
 // Only evidence-backed values contribute; absent verified tests remain blank.
 function verifiedExecutionTotal(rows){const values=rows.map(r=>r?.verified_increment_cny).filter(v=>typeof v==='number'&&Number.isFinite(v));return values.length?values.reduce((a,b)=>a+b,0):null;}

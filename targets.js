@@ -1,6 +1,7 @@
 'use strict';
-// Independent daily snapshot: weekly diagnostics and pricing never read it.
+// Daily month-to-date snapshot; also supplies the all-members MTD view.
 let G=window.SNAPSHOT_GUARD.restore('targets',window.OPERATIONS_TARGETS||null),targetNetworkError=false;
+window.OPERATIONS_TARGETS=G;
 const tg=id=>document.getElementById(id);
 const tx=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tn=(v,d=2)=>v==null?'—':Number(v).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -47,5 +48,5 @@ tg('goalPeriod').value=['2026-10','2026-11','2026-12'].includes(targetToday().sl
 tg('personalGoalMonth').value=['2026-10','2026-11','2026-12'].includes(targetToday().slice(0,7))?targetToday().slice(0,7):'2026-10';
 tg('goalPeriod').addEventListener('change',renderDepartment);tg('personalGoalMonth').addEventListener('change',renderPersonal);
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',renderTargets));renderTargets();
-async function refreshTargets(){try{const r=await fetch('targets.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error('target snapshot unavailable');const next=await r.json();if(next.schema_version!==1||!next.departments||!next.personal)throw Error('invalid target snapshot');G=window.SNAPSHOT_GUARD.accept('targets',next);targetNetworkError=false;}catch{targetNetworkError=true;}renderTargets();}
+async function refreshTargets(){try{const r=await fetch('targets.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error('target snapshot unavailable');const next=await r.json();if(next.schema_version!==1||!next.departments||!next.personal)throw Error('invalid target snapshot');G=window.SNAPSHOT_GUARD.accept('targets',next);window.OPERATIONS_TARGETS=G;targetNetworkError=false;render();periodNotes();}catch{targetNetworkError=true;}renderTargets();}
 if(location.protocol.startsWith('http')){refreshTargets();setInterval(refreshTargets,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshTargets();});}

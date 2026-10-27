@@ -19,11 +19,13 @@ MODULES = {
     'execution': ('execution.json', 'execution-data.js', 'window.EXECUTION_DATA='),
     'alerts': ('alerts.json', 'alerts-data.js', 'window.ALERTS_DATA='),
     'weekly': ('summary.json', 'summary-data.js', 'window.OPERATIONS_DATA='),
+    'weekly_business': ('weekly-business.json', 'weekly-business-data.js', 'window.WEEKLY_BUSINESS_DATA='),
 }
 STATIC = ('.nojekyll','index.html','style.css','app.js','summary.json','summary-data.js',
           'targets.json','targets-data.js','targets.js','execution.json',
           'execution-data.js','execution-sync.js','snapshot-guard.js',
-          'alerts.json','alerts-data.js','alerts.js','alerts.css')
+          'alerts.json','alerts-data.js','alerts.js','alerts.css',
+          'weekly-business.json','weekly-business-data.js')
 LIVE = 'https://blackblancakeep62-crypto.github.io/operations-four-dashboard/'
 
 class PublicationError(ValueError):
@@ -31,7 +33,30 @@ class PublicationError(ValueError):
 
 def versions(module, data):
     result = {}
-    if module == 'weekly':
+    if module == 'weekly_business':
+        if data.get('schema')!='weekly-business-v1' or data.get('financial_basis')!={'sales_factor':.9,'profit_factor':.85,'basis':'adjusted_once_from_raw_erp'}:
+            raise PublicationError('invalid_shared_weekly_basis')
+        if not isinstance(data.get('groups'),dict) or not isinstance(data.get('department_periods'),list):
+            raise PublicationError('invalid_shared_weekly_groups')
+        result['root']=data
+        result.update({'group/'+k:v for k,v in data['groups'].items()})
+        for entry in [data, *data['groups'].values()]:
+            periods=entry.get('department_periods',entry.get('periods',[]))
+            for p in periods:
+                from datetime import date
+                start,end=date.fromisoformat(p['start']),date.fromisoformat(p['end'])
+                if start.weekday()!=0 or (end-start).days!=6 or p.get('complete') is not True:
+                    raise PublicationError('invalid_shared_week')
+                m=p['metrics']
+                import math
+                fields=('orderProductSales','salesNetProfit','discountCostSales','unitsOrdered','orders','adsSpend','adjusted_sales_cny','adjusted_net_profit_cny')
+                if not all(isinstance(m.get(k),(int,float)) and not isinstance(m[k],bool) and math.isfinite(m[k]) for k in fields):
+                    raise PublicationError('invalid_shared_weekly_metrics')
+                for raw,adjusted,factor in [('orderProductSales','adjusted_sales_cny',.9),('salesNetProfit','adjusted_net_profit_cny',.85)]:
+                    if abs(m[raw]*factor-m[adjusted])>1e-6:raise PublicationError('double_weekly_adjustment')
+                if m['adjusted_sales_cny'] and abs(m['adjusted_net_margin']-m['adjusted_net_profit_cny']/m['adjusted_sales_cny'])>1e-9:
+                    raise PublicationError('invalid_shared_weekly_margin')
+    elif module == 'weekly':
         if data.get('financial_basis',{}).get('schema')!='adjusted-display-v1':raise PublicationError('invalid_weekly_financial_basis')
         if not isinstance(data.get('groups'),list):raise PublicationError('invalid_weekly_groups')
         result['scope']={'rule_version':data.get('rule_version'),'financial_basis':data['financial_basis']}
@@ -64,7 +89,7 @@ def instant(value):
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 def assert_no_regression(module, candidate, previous, allow_rollback=False, reason=''):
-    if module == 'alerts' and previous is None:
+    if module in ('alerts','weekly_business') and previous is None:
         versions(module,candidate)
         return
     new, old = versions(module,candidate), versions(module,previous)
@@ -74,7 +99,11 @@ def assert_no_regression(module, candidate, previous, allow_rollback=False, reas
     for scope, before in old.items():
         after = new.get(scope)
         if after is None: raise PublicationError('missing_previous_scope:'+scope)
-        if module == 'weekly':
+        if module == 'weekly_business':
+            if before.get('weekly_cutoff') and (not after.get('weekly_cutoff') or after['weekly_cutoff']<before['weekly_cutoff']):
+                raise PublicationError('older_shared_weekly_cutoff:'+scope)
+            fields=('generated_at','last_success_at') if scope=='root' else ()
+        elif module == 'weekly':
             if scope=='scope':
                 if after!=before:raise PublicationError('weekly_statistical_basis_changed')
                 continue
@@ -135,7 +164,9 @@ def publish_module(repo, module, payload=None, attempts=3, allow_rollback=False,
     for attempt in range(attempts):
         git(repo,'fetch','origin','main')
         parent = text(repo,'rev-parse','origin/main')
-        previous = validate_pair(module,committed_payload(repo,parent,module))
+        names=text(repo,'ls-tree','--name-only',parent).splitlines()
+        previous = (None if module=='weekly_business' and MODULES[module][0] not in names
+                    else validate_pair(module,committed_payload(repo,parent,module)))
         assert_no_regression(module,candidate,previous,allow_rollback,reason)
         with tempfile.TemporaryDirectory(prefix='dashboard-index-') as folder:
             env = {'GIT_INDEX_FILE':str(Path(folder)/'index')}
@@ -165,12 +196,12 @@ def load_live(module):
         with urllib.request.urlopen(request,timeout=30) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
-        if module != 'alerts' or error.code != 404:raise
+        if module not in ('alerts','weekly_business') or error.code != 404:raise
         # One-time onboarding only: the deployed manifest must prove this module
         # has never been packaged. Other HTTP/network failures stay fail-closed.
         with urllib.request.urlopen(LIVE+'publication.json?check='+uuid.uuid4().hex,timeout=30) as response:
             manifest=json.load(response)
-        if 'alerts.json' in manifest.get('hashes',{}):raise
+        if MODULES[module][0] in manifest.get('hashes',{}):raise
         return None
 
 def prepare_site(repo, output, live_reader=load_live, allow_rollback=False, reason=''):

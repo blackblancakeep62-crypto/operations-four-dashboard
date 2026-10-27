@@ -34,6 +34,11 @@ def weekly(cutoff='2026-10-18'):
             'groups':[{'manager':'李漉','report_verified':True,'asof':'2026-10-26','weekly_cutoff':cutoff,
                        'monthly_cutoff':'2026-10-25','generated_at':'2026-10-26T11:00:00+08:00'}]}
 
+def shared_weekly(cutoff='2026-10-18'):
+    return {'schema':'weekly-business-v1','financial_basis':{'sales_factor':.9,'profit_factor':.85,'basis':'adjusted_once_from_raw_erp'},
+            'weekly_cutoff':cutoff,'department_periods':[],'groups':{},
+            'generated_at':'2026-10-27T11:00:00+08:00','last_success_at':'2026-10-27T11:00:00+08:00'}
+
 class PublicationTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.base=Path(self.tmp.name)
@@ -41,7 +46,7 @@ class PublicationTests(unittest.TestCase):
         subprocess.run(['git','init','--bare',str(self.remote)],check=True,capture_output=True)
         self.clone(self.a)
         p.git(self.a,'checkout','-b','main')
-        initial={**pair('weekly',weekly()),**pair('targets',target('2026-10-22','2026-10-23T10:00:00+08:00')),
+        initial={**pair('weekly',weekly()),**pair('weekly_business',shared_weekly()),**pair('targets',target('2026-10-22','2026-10-23T10:00:00+08:00')),
                  **pair('alerts',alerts()),
                  **pair('execution',execution('2026-10-26T10:00:00+08:00'))}
         for name in p.STATIC:
@@ -167,7 +172,7 @@ class PublicationTests(unittest.TestCase):
         (self.a/'targets.json').write_bytes(b'old local build must never be packaged')
         output=self.base/'site'
         live={'weekly':weekly(),'targets':target('2026-10-22','2026-10-23T10:00:00+08:00'),
-              'alerts':alerts(),
+              'alerts':alerts(),'weekly_business':shared_weekly(),
               'execution':execution('2026-10-26T10:00:00+08:00')}
         manifest=p.prepare_site(self.a,output,live_reader=lambda module:live[module])
         self.assertEqual(manifest['source_commit'],result['commit'])
@@ -183,6 +188,14 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(p.PublicationError,'older_business_cutoff'):
             p.prepare_site(self.a,self.base/'site',live_reader=lambda module:target())
         self.assertFalse((self.base/'site').exists())
+
+    def test_shared_weekly_isolated_from_pricing_and_daily_snapshots(self):
+        before={m:self.observed(m) for m in ('weekly','targets','execution','alerts')}
+        result=p.publish_module(self.b,'weekly_business',pair('weekly_business',shared_weekly('2026-10-25')))
+        for m,d in before.items():self.assertEqual(self.observed(m),d)
+        self.assertEqual(set(p.text(self.b,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()),set(p.MODULES['weekly_business'][:2]))
+        with self.assertRaisesRegex(p.PublicationError,'older_shared_weekly'):
+            p.publish_module(self.a,'weekly_business',pair('weekly_business',shared_weekly()))
 
     def test_live_verification_failure_does_not_create_artifact(self):
         def unavailable(module):raise OSError('offline')

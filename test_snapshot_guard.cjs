@@ -32,3 +32,4 @@ assert.equal(guard.restore('execution',execution('2026-10-26T09:00:00+08:00')).d
 guard=load();assert.equal(guard.restore('alerts',older).status_snapshot_date,alertSeed.status_snapshot_date);
 console.log('Alerts: stale business/status date rejection, reload retention and execution isolation passed.');
 require('./test_country_filter.cjs');
+require('./test_weekly_business.cjs');

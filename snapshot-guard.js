@@ -4,7 +4,10 @@ window.SNAPSHOT_GUARD=(()=>{
   const known={};
   function versions(module,data){
     const out={};
-    if(module==='targets'){
+    if(module==='weekly_business'){
+      if(data?.schema!=='weekly-business-v1'||!data.groups||!Array.isArray(data.department_periods))throw Error('snapshot schema');
+      out.root=data;for(const [n,g] of Object.entries(data.groups))out['group/'+n]=g;
+    }else if(module==='targets'){
       if(data?.schema_version!==1||!data.departments||!data.personal)throw Error('snapshot schema');
       for(const [p,e] of Object.entries(data.departments))if(e.actual)out['department/'+p]=e.actual;
       for(const [p,people] of Object.entries(data.personal))for(const [n,e] of Object.entries(people))if(e.actual)out['personal/'+p+'/'+n]=e.actual;
@@ -24,7 +27,10 @@ window.SNAPSHOT_GUARD=(()=>{
     for(const [scope,old] of Object.entries(b)){
       const current=a[scope];if(!current)throw Error('missing scope');
       let fields;
-      if(module==='targets'){
+      if(module==='weekly_business'){
+        if(old.weekly_cutoff&&(!current.weekly_cutoff||current.weekly_cutoff<old.weekly_cutoff))throw Error('older weekly cutoff');
+        fields=scope==='root'?['generated_at','last_success_at']:[];
+      }else if(module==='targets'){
         if(current.start!==old.start||current.basis!==old.basis)throw Error('changed scope');
         if(!current.cutoff||current.cutoff<old.cutoff)throw Error('older business date');
         fields=current.cutoff===old.cutoff?['refreshed_at']:[];

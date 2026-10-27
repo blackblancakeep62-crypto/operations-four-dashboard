@@ -1,0 +1,11 @@
+# 周度共享经营同步
+
+周二10:00原提价任务完成四组提交后，既有`unified.py dashboard`出口读取筛选前原始缓存，并分别发布提价summary及weekly-business两个模块。原定时器、每日播报和Drive执行同步不变；不增加ERP请求。
+
+共享周经营完整性包括负责人隔离、账号/国家/SKU/ASIN维度、分页总量、无ASIN排除记录的收据、必要字段、共管勾稽和自然周。未通过的周不发布新金额，保留之前发布范围的快照并显示缺口；不把旧快照重新认证为部门全量。后续ERP原任务取数会在原分页收据保留此前被跳过的无ASIN明细。
+
+数据所有权：weekly-business仅写weekly-business.json及weekly-business-data.js；现有weekly模块仅合并提价字段；targets/execution/alerts各自独立。所有发布从最新远端main叠加所拥有的文件，重试非强推冲突并校验日期，避免旧本地checkout覆盖其他模块。
+
+2026-10-27首次迁移：已知本周四组独立归属记录735/512/343/177条，另有1条共管；完整原分页6093条，其中48条无ASIN原始记录未保留，无法确定四组覆盖。因此10/19–10/25周经营暂不发布，保留10/18旧范围。共管ASIN B0CZMWRL3Z涉及原始销售额1212、净毛利47.46，既有MSKU补查不能勾稽，不自动拆分。
+
+月累计仍读targets成功播报快照，直接使用已调整金额；无每日销量/成交额/国家拆分时留空。测试：本地tests/test_weekly_business.py、test_publication_guard.py、test_snapshot_guard.cjs。
