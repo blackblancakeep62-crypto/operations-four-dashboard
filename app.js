@@ -172,6 +172,7 @@ function completeMetrics(row,p){
  return (p.daily?['orderProductSales','salesNetProfit','adsSpend','adjusted_sales_cny','adjusted_net_profit_cny']:['orderProductSales','discountCostSales','unitsOrdered','salesNetProfit','adsSpend','adjusted_sales_cny','adjusted_net_profit_cny']).every(k=>typeof row[k]==='number'&&Number.isFinite(row[k]));
 }
 function periodCoverage(gs){
+ renderWeeklyDifferences();
  const p=selectedPeriod(),kind=p?.kind||'week',cutoffs=gs.map(g=>g.manager+' '+(kind==='week'?g.weekly_cutoff:g.monthly_cutoff||'待接入')).join('；');
  if(tab==='all'&&W&&kind==='week'){
   const dept=W.department_periods.find(x=>x.start===p.start&&x.end===p.end),count=gs.filter(g=>period(g,$('period').value)||countryEmpty(g,$('period').value)).length;
@@ -188,6 +189,18 @@ function periodCoverage(gs){
   const dates=gs.map(g=>g.manager+' '+(cardScope(g,tab).asof||'待接入')).join('；');
   $('periodCoverage').textContent=selected+'该周期暂无完整数据：'+(tab==='price'?'提价机会、执行状态及理论增量':'库存与清理状态')+'为独立状态快照，不支持所选周/月回溯。实际快照截止：'+dates+'。'+(tab==='exit'?'退出产品销售额、净毛利另按所选周期精确匹配，缺失留空；经营实际统计截止：'+cutoffs+'。':'执行状态以「执行表截至」为准，不计作所选周期成果。');
  }
+}
+function renderWeeklyDifferences(){
+ let box=$('weeklyDifferences');if(!box){box=document.createElement('div');box.id='weeklyDifferences';box.className='notice';box.setAttribute('role','status');$('periodCoverage').insertAdjacentElement('afterend',box);}
+ const p=selectedPeriod(),d=W?.differences;
+ box.hidden=tab!=='all'||p?.kind!=='week'||d?.start!==p.start||d?.end!==p.end;
+ if(box.hidden)return;
+ const u=d.department_confirmed_unassigned,ref=d.reference,parts=[];
+ if(u?.records)parts.push(`未归属负责人（部门归属已确认，个人未分配）：${u.records}条，ERP原始销售额 ¥${num(u.raw_sales,2)}、原始净毛利 ¥${num(u.raw_net_profit,2)}。`+(u.formal_week_inclusion?'已在部门计入一次，不重复加到个人。':'本周整体校验未通过，暂未计入正式周指标。'));
+ if(ref){const c=ref.classification||{},four=c.department_confirmed_mapping_missing,other=c.other_manager_mapping,unknown=c.department_unverified;
+  parts.push(`无ASIN对照：${ref.measurement_start}—${ref.measurement_end}月累计缓存含${ref.records}条虚拟MSKU、零销售负利润记录；四组产品映射${four?.records||0}条、净毛利 ¥${num(four?.raw_net_profit,2)}；其他负责人映射${other?.records||0}条、¥${num(other?.raw_net_profit,2)}；部门待核${unknown?.records||0}条、¥${num(unknown?.raw_net_profit,2)}。具体费用类型及本周原始金额未核实，月累计金额不能替代周金额。`);
+ }
+ box.textContent='部门差异说明（不分配给个人）：'+parts.join(' ');
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=(x,d=0)=>x===null||x===undefined?'—':Number(x).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d});

@@ -36,4 +36,11 @@ inputs.site.value='all';
 assert.equal(JSON.stringify(ctx.window.OPERATIONS_DATA),JSON.stringify(summary));
 assert.equal(JSON.stringify(ctx.window.OPERATIONS_TARGETS),JSON.stringify(targets));
 assert.equal(evaluate("cardScope(D.groups[0],'price').weekly_cutoff"),'2026-10-25');
+const differenceBox={hidden:false,textContent:''};inputs.weeklyDifferences=differenceBox;
+weekly.differences={start:'2026-10-19',end:'2026-10-25',department_confirmed_unassigned:{records:1,raw_sales:1212,raw_net_profit:47.46,formal_week_inclusion:false},
+ reference:{measurement_start:'2026-10-01',measurement_end:'2026-10-25',records:48,classification:{department_confirmed_mapping_missing:{records:6,raw_net_profit:-2.42},other_manager_mapping:{records:34,raw_net_profit:-10.08},department_unverified:{records:8,raw_net_profit:-4.7}}}};
+inputs.period.value='week_2026-10-19_2026-10-25_CNY';evaluate('renderWeeklyDifferences()');
+assert.equal(differenceBox.hidden,false);assert(differenceBox.textContent.includes('1,212.00'));assert(differenceBox.textContent.includes('47.46'));
+assert(differenceBox.textContent.includes('月累计金额不能替代周金额'));assert.equal(evaluate("totals(D.groups,$('period').value).orderProductSales==null"),true);
+evaluate("tab='price';renderWeeklyDifferences()");assert.equal(differenceBox.hidden,true);
 console.log('Shared weeks: incomplete latest hidden, previous retained, independent pricing, daily MTD once-only amounts and missing country/volume fields passed.');
