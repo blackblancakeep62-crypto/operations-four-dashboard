@@ -6,8 +6,8 @@
  const time=v=>v?new Date(v).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚无成功同步';
  const get=(row,key)=>row[key]??'—';
  function filtered(rows,ownerKey='owner'){
-  const country=el('site').value.split(':').pop();
-  return rows.filter(r=>(el('manager').value==='all'||r[ownerKey]===el('manager').value)&&(country==='all'||r.country===country));
+  const country=el('site').value;
+  return rows.filter(r=>(el('manager').value==='all'||r[ownerKey]===el('manager').value)&&(country==='all'||window.OPERATING_COUNTRIES.parse(r.country)?.country===country));
  }
  function source(s){return `<a href="https://docs.google.com/spreadsheets/d/${h(data.source_id)}/edit#gid=${s.gid}&range=A${s.row}" target="_blank" rel="noopener">原表第 ${s.row} 行 ↗</a>`;}
  const pills=labels=>labels.map(l=>`<span class="pill">${h(l)}</span>`).join('');
@@ -34,6 +34,7 @@
   summary.innerHTML=`<strong>运营预警：${parents.length} 个父单</strong> · 异常 ${risk.length} · 红榜 ${growth.length} · ${h(status)} <button type="button" id="openWarnings">查看运营预警 →</button><small>${h(dates())}</small>`;
   el('openWarnings').onclick=()=>document.querySelector('nav button[data-tab="warnings"]').click();
   if(!active)return;
+  const country=el('site').value;el('countryCoverage').hidden=country==='all';el('countryCoverage').textContent=parents.length?'所选国家匹配 '+parents.length+' 个去重预警父单；保留原表统计含义。':'所选国家及负责人暂无对应预警数据；不回退全部国家。';
   el('freshness').textContent=dates();
   el('notice').textContent='按原表已计算结果展示；当前预警快照独立于经营周期筛选。原表记录由运营维护，网页只读。';
   const selected=window.OPERATING_PERIODS.parse(el('period').value);

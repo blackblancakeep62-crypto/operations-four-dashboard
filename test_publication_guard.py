@@ -80,6 +80,24 @@ class PublicationTests(unittest.TestCase):
         changed=p.text(self.b,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()
         self.assertEqual(set(changed),set(p.MODULES['targets'][:2]))
 
+    def test_all_snapshot_publishers_preserve_country_frontend_from_stale_checkout(self):
+        frontend = {name: (Path(__file__).parent/name).read_bytes()
+                    for name in ('app.js','index.html','execution-sync.js','alerts.js')}
+        for name, raw in frontend.items(): (self.a/name).write_bytes(raw)
+        p.git(self.a,'add',*frontend)
+        p.git(self.a,'-c','user.name=Test','-c','user.email=test@example.com',
+              'commit','-m','Maintain independent country component')
+        p.git(self.a,'push','origin','HEAD:main')
+        frontend={name:p.git(self.a,'show','HEAD:'+name) for name in frontend}
+        # self.b still contains old frontend blobs. Every supported publisher
+        # must overlay only its owned data pair onto the fresh main tree.
+        payloads={'weekly':weekly('2026-10-25'),'targets':target(),
+                  'execution':execution(),'alerts':alerts('2026-10-27T11:00:00+08:00')}
+        for module,data in payloads.items():
+            result=p.publish_module(self.b,module,pair(module,data))
+            for name,raw in frontend.items():
+                self.assertEqual(p.git(self.b,'show',result['commit']+':'+name),raw)
+
     def test_weekly_refresh_preserves_daily_alerts_and_execution_modules(self):
         before={module:self.observed(module) for module in ('targets','alerts','execution')}
         p.publish_module(self.b,'weekly',pair('weekly',weekly('2026-10-25')))

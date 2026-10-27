@@ -4,7 +4,8 @@ window.EXECUTION_DATA=window.SNAPSHOT_GUARD.restore('execution',window.EXECUTION
 const executionBaseOp=op;
 op=function(g){
   const base=executionBaseOp(g), live=window.EXECUTION_DATA?.groups?.[g.manager];
-  const patch=$('site').value==='all'?live?.operational:live?.site_operational?.[$('site').value];
+  if($('site').value!=='all')return OperatingCountries.operational(g.site_operational,$('site').value,live?.site_operational);
+  const patch=live?.operational;
   return base&&patch?{...base,...patch}:base;
 };
 function executionStatus(){
