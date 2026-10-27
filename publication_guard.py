@@ -18,6 +18,7 @@ MODULES = {
     'targets': ('targets.json', 'targets-data.js', 'window.OPERATIONS_TARGETS='),
     'execution': ('execution.json', 'execution-data.js', 'window.EXECUTION_DATA='),
     'alerts': ('alerts.json', 'alerts-data.js', 'window.ALERTS_DATA='),
+    'weekly': ('summary.json', 'summary-data.js', 'window.OPERATIONS_DATA='),
 }
 STATIC = ('.nojekyll','index.html','style.css','app.js','summary.json','summary-data.js',
           'targets.json','targets-data.js','targets.js','execution.json',
@@ -30,7 +31,13 @@ class PublicationError(ValueError):
 
 def versions(module, data):
     result = {}
-    if module == 'targets':
+    if module == 'weekly':
+        if data.get('financial_basis',{}).get('schema')!='adjusted-display-v1':raise PublicationError('invalid_weekly_financial_basis')
+        if not isinstance(data.get('groups'),list):raise PublicationError('invalid_weekly_groups')
+        result['scope']={'rule_version':data.get('rule_version'),'financial_basis':data['financial_basis']}
+        for group in data['groups']:
+            if group.get('report_verified'):result['group/'+group['manager']]=group
+    elif module == 'targets':
         if data.get('schema_version') != 1: raise PublicationError('invalid_targets_schema')
         for period, entry in data['departments'].items():
             if entry.get('actual'):
@@ -67,7 +74,14 @@ def assert_no_regression(module, candidate, previous, allow_rollback=False, reas
     for scope, before in old.items():
         after = new.get(scope)
         if after is None: raise PublicationError('missing_previous_scope:'+scope)
-        if module == 'targets':
+        if module == 'weekly':
+            if scope=='scope':
+                if after!=before:raise PublicationError('weekly_statistical_basis_changed')
+                continue
+            for key in ('weekly_cutoff','monthly_cutoff','asof','pricing_weekly_cutoff','pricing_monthly_cutoff','pricing_asof'):
+                if before.get(key) and (not after.get(key) or after[key]<before[key]):raise PublicationError('older_weekly_date:'+scope+'/'+key)
+            fields=('generated_at','pricing_updated_at')
+        elif module == 'targets':
             if (after.get('start'),after.get('basis')) != (before.get('start'),before.get('basis')):
                 raise PublicationError('statistical_basis_changed:'+scope)
             if not after.get('cutoff') or after['cutoff'] < before['cutoff']:

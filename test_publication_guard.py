@@ -29,6 +29,11 @@ def alerts(stamp='2026-10-26T14:00:00+08:00'):
             'latest_action_date':'2026-10-21','last_success_at':stamp,'checked_at':stamp,
             'data_asof':'2026-10-24T23:59:59+08:00','parents':[],'entries':[],'history':[],'actions':[]}
 
+def weekly(cutoff='2026-10-18'):
+    return {'rule_version':'V4-accepted-20261023','financial_basis':{'schema':'adjusted-display-v1'},
+            'groups':[{'manager':'李漉','report_verified':True,'asof':'2026-10-26','weekly_cutoff':cutoff,
+                       'monthly_cutoff':'2026-10-25','generated_at':'2026-10-26T11:00:00+08:00'}]}
+
 class PublicationTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.base=Path(self.tmp.name)
@@ -36,13 +41,12 @@ class PublicationTests(unittest.TestCase):
         subprocess.run(['git','init','--bare',str(self.remote)],check=True,capture_output=True)
         self.clone(self.a)
         p.git(self.a,'checkout','-b','main')
-        initial={**pair('targets',target('2026-10-22','2026-10-23T10:00:00+08:00')),
+        initial={**pair('weekly',weekly()),**pair('targets',target('2026-10-22','2026-10-23T10:00:00+08:00')),
                  **pair('alerts',alerts()),
                  **pair('execution',execution('2026-10-26T10:00:00+08:00'))}
         for name in p.STATIC:
             if name not in initial:initial[name]=b'preserve-'+name.encode()
         initial['index.html']=b'<script src="targets-data.js"></script><script src="snapshot-guard.js"></script>'
-        initial['summary.json']=b'{"keep":"ERP theory unchanged"}'
         for name,raw in initial.items():(self.a/name).write_bytes(raw)
         p.git(self.a,'add','.')
         p.git(self.a,'-c','user.name=Test','-c','user.email=test@example.com','commit','-m','initial')
@@ -64,7 +68,7 @@ class PublicationTests(unittest.TestCase):
         result=p.publish_module(self.a,'execution',pair('execution',execution()))
         self.assertEqual(self.observed('targets'),target())
         self.assertEqual(self.observed('execution'),execution())
-        self.assertEqual(p.git(self.a,'show',result['commit']+':summary.json'),b'{"keep":"ERP theory unchanged"}')
+        self.assertEqual(p.git(self.a,'show',result['commit']+':summary.json'),pair('weekly',weekly())['summary.json'])
         changed=p.text(self.a,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()
         self.assertEqual(set(changed),set(p.MODULES['execution'][:2]))
 
@@ -75,6 +79,14 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(self.observed('execution'),execution())
         changed=p.text(self.b,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()
         self.assertEqual(set(changed),set(p.MODULES['targets'][:2]))
+
+    def test_weekly_refresh_preserves_daily_alerts_and_execution_modules(self):
+        before={module:self.observed(module) for module in ('targets','alerts','execution')}
+        p.publish_module(self.b,'weekly',pair('weekly',weekly('2026-10-25')))
+        self.assertEqual(self.observed('weekly'),weekly('2026-10-25'))
+        for module,data in before.items():self.assertEqual(self.observed(module),data)
+        with self.assertRaisesRegex(p.PublicationError,'older_weekly_date'):
+            p.publish_module(self.a,'weekly',pair('weekly',weekly()))
 
     def test_alert_publish_cannot_touch_execution_or_business(self):
         before={name:p.git(self.a,'show','origin/main:'+name) for name in ('execution.json','targets.json','summary.json')}
@@ -136,7 +148,7 @@ class PublicationTests(unittest.TestCase):
         result=p.publish_module(self.b,'targets',pair('targets',target()))
         (self.a/'targets.json').write_bytes(b'old local build must never be packaged')
         output=self.base/'site'
-        live={'targets':target('2026-10-22','2026-10-23T10:00:00+08:00'),
+        live={'weekly':weekly(),'targets':target('2026-10-22','2026-10-23T10:00:00+08:00'),
               'alerts':alerts(),
               'execution':execution('2026-10-26T10:00:00+08:00')}
         manifest=p.prepare_site(self.a,output,live_reader=lambda module:live[module])

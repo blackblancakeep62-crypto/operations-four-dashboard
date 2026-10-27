@@ -12,6 +12,18 @@ assert.throws(()=>guard.accept('execution',execution('2026-10-26T09:00:00+08:00'
 guard.accept('execution',execution('2026-10-26T12:00:00+08:00'));
 assert.equal(guard.accept('targets',target('2026-10-25')).departments['2026-10'].actual.cutoff,'2026-10-25');
 console.log('Browser freshness: forward/reverse module updates, stale response rejection and reload cache retention passed.');
+const app=fs.readFileSync('app.js','utf8');
+const scopedContext={expectedWeeklyCutoff:()=> '2026-10-25'};vm.createContext(scopedContext);
+vm.runInContext(app.slice(app.indexOf('function cardScope('),app.indexOf('function render(){')),scopedContext);
+const original={weekly_cutoff:'2026-10-18',asof:'2026-10-23',stale:true,pricing_report_verified:true,
+  pricing_weekly_cutoff:'2026-10-25',pricing_monthly_cutoff:'2026-10-25',pricing_weekly_complete:12,pricing_monthly_coverage:6,pricing_asof:'2026-10-26'};
+const before=JSON.stringify(original);
+assert.equal(scopedContext.cardScope(original,'price').weekly_cutoff,'2026-10-25');
+assert.equal(scopedContext.cardScope(original,'price').stale,false);
+assert.equal(scopedContext.cardScope(original,'all'),original);
+assert.equal(scopedContext.cardScope(original,'exit'),original);
+assert.equal(JSON.stringify(original),before);
+console.log('Weekly pricing view: current dates shown; all-members and exit source objects unchanged.');
 const alertSeed=JSON.parse(fs.readFileSync('alerts.json','utf8'));
 guard.restore('alerts',alertSeed);
 const older=structuredClone(alertSeed);older.status_snapshot_date='2000-01-01';older.last_success_at='2099-01-01T00:00:00Z';
