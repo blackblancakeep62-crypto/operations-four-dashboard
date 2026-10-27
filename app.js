@@ -205,7 +205,7 @@ function renderWeeklyCoverageDetails(){
  body.innerHTML=`<p>${esc(o.start+' — '+o.end)}：已确认金额·覆盖待核验。金额分区对账通过，部门覆盖完整性未通过；不是完整部门业绩。</p>
  <p>已确认原始销售额 ${cash(c.orderProductSales)}、净利润 ${cash(c.salesNetProfit)}；已含个人暂挂${num(u.records)}条（销售额 ${cash(u.metrics.orderProductSales)}、净利润 ${cash(u.metrics.salesNetProfit)}），部门计入一次。</p>
  <p>待核验原始销售额 ${cash(p.raw_sales)}、净利润 ${cash(p.raw_net_profit)}，${num(p.financially_nonzero_records)}条非零明细。此为全源部门待核范围，不能直接混入四组金额。净利润对账差 ${cash(d.raw_net_profit_delta)}仍未确认；与舍入现象相容不等于ERP确认，未忽略、未分配。</p>
- <p>共管${num(o.attribution_gaps?.joint_source_records)}条，${num(o.attribution_gaps?.joint_msku_reconciled)}条已完成MSKU金额勾稽；其他346条中${num(o.attribution_gaps?.other_346_review?.department_unconfirmed?.records)}条仍待核，独立异常台账保留。销量、广告费率、平均单价及同／环比仅在同范围来源完整并核验后逐项展示。</p>
+ <p>共管${num(o.attribution_gaps?.joint_source_records)}条，${num(o.attribution_gaps?.joint_msku_reconciled)}条已完成MSKU金额勾稽；无负责人归属记录中${num(o.attribution_gaps?.other_346_review?.department_unconfirmed?.records)}条仍待核，独立异常台账保留。销量、广告费率、平均单价及同／环比仅在同范围来源完整并核验后逐项展示。</p>
  <p>上一完整周 ${last?esc(last.start+' — '+last.end):'暂无'}：调整后销售额 ${cash(last?.metrics?.adjusted_sales_cny)}、净利润 ${cash(last?.metrics?.adjusted_net_profit_cny)}（保留原有效快照范围）；不以旧周冒充本周，也不与当前部分范围计算同比或环比。</p>
  <p>当前周金额仅作经营观察，不进入正式部门目标完成率、个人绩效、正式趋势或自动经营结论。月度正式经营数据仍以飞书播报为准。CNY口径，0.9／0.85各执行一次。</p>`;
 }

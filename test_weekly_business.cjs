@@ -94,6 +94,7 @@ inputs.period.value='week_2026-10-19_2026-10-25_CNY';
 evaluate("tab='price';renderWeeklyDifferences()");assert.equal(differenceBox.hidden,true);
 evaluate('renderWeeklyCoverageDetails()');assert.equal(inputs.weeklyCoverageDetails.hidden,true);assert.equal(evaluate('confirmedCardMetrics()'),null);
 const html=fs.readFileSync(__dirname+'/index.html','utf8');assert(!html.includes('id="weeklyObservation"'));
+assert(!app.includes('其他346条中'));
 assert(html.indexOf('id="metrics"')<html.indexOf('id="weeklyCoverageDetails"'));assert(html.includes('数据覆盖与差异说明'));
 assert.equal(JSON.stringify(ctx.window.OPERATIONS_DATA),JSON.stringify(summary));assert.equal(JSON.stringify(ctx.window.OPERATIONS_TARGETS),JSON.stringify(targets));
 console.log('Weekly cards: confirmed amounts render independently, unsupported metrics stay pending, coverage collapses below six cards, formal/person/targets unchanged, next-week dates verified.');
