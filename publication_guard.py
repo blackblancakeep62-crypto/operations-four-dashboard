@@ -48,6 +48,7 @@ def versions(module, data):
                 if start.weekday()!=0 or (end-start).days!=6 or p.get('complete') is not True:
                     raise PublicationError('invalid_shared_week')
                 m=p['metrics']
+                if p.get('formal') is False or m.get('status')=='partially_verified':raise PublicationError('observation_in_formal_period')
                 import math
                 fields=('orderProductSales','salesNetProfit','discountCostSales','unitsOrdered','orders','adsSpend','adjusted_sales_cny','adjusted_net_profit_cny')
                 if not all(isinstance(m.get(k),(int,float)) and not isinstance(m[k],bool) and math.isfinite(m[k]) for k in fields):
@@ -56,6 +57,24 @@ def versions(module, data):
                     if abs(m[raw]*factor-m[adjusted])>1e-6:raise PublicationError('double_weekly_adjustment')
                 if m['adjusted_sales_cny'] and abs(m['adjusted_net_margin']-m['adjusted_net_profit_cny']/m['adjusted_sales_cny'])>1e-9:
                     raise PublicationError('invalid_shared_weekly_margin')
+        o=data.get('observation_snapshot')
+        if o is not None:
+            from datetime import date
+            if (o.get('schema')!='weekly-observation-v1' or o.get('status')!='partially_verified' or o.get('formal') is not False or
+                o.get('complete') is not False or o.get('department_coverage_complete') is not False or o.get('amount_reconciliation_passed') is not True):
+                raise PublicationError('invalid_weekly_observation_state')
+            if date.fromisoformat(o['start']).weekday()!=0 or (date.fromisoformat(o['end'])-date.fromisoformat(o['start'])).days!=6:
+                raise PublicationError('invalid_weekly_observation_period')
+            if data.get('requested_cutoff')!=o['end'] or data.get('weekly_cutoff','')>=o['end']:
+                raise PublicationError('observation_overwrites_formal_week')
+            for flag in ('formal_department_targets','personal_performance','automatic_business_conclusions','replace_last_complete_week'):
+                if o.get('eligibility',{}).get(flag) is not False:raise PublicationError('unsafe_weekly_observation_use')
+            import math
+            m=o['confirmed']
+            if not all(isinstance(m.get(f),(int,float)) and not isinstance(m[f],bool) and math.isfinite(m[f]) for f in ('orderProductSales','salesNetProfit','adjusted_sales_cny','adjusted_net_profit_cny')):
+                raise PublicationError('invalid_weekly_observation_amount')
+            if abs(m['orderProductSales']*.9-m['adjusted_sales_cny'])>1e-6 or abs(m['salesNetProfit']*.85-m['adjusted_net_profit_cny'])>1e-6:
+                raise PublicationError('double_weekly_observation_adjustment')
     elif module == 'weekly':
         if data.get('financial_basis',{}).get('schema')!='adjusted-display-v1':raise PublicationError('invalid_weekly_financial_basis')
         if not isinstance(data.get('groups'),list):raise PublicationError('invalid_weekly_groups')

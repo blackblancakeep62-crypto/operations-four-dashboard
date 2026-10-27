@@ -51,5 +51,24 @@ weekly.differences.recovery.ownership_review={joint_source_records:32,joint_msku
 weekly.differences.recovery.monetary_validation={source_amount_partition_passed:true,financially_nonzero_unconfirmed_records:222,unconfirmed:{raw_sales:98287.85,raw_net_profit:23131.82}};
 evaluate('renderWeeklyDifferences()');
 assert(differenceBox.textContent.includes('25条已完成'));assert(differenceBox.textContent.includes('26,378.23'));assert(differenceBox.textContent.includes('暂不发布'));assert(differenceBox.textContent.includes('不能当作四组业绩'));
+inputs.weeklyObservation={hidden:true,innerHTML:''};
+weekly.observation_snapshot={start:'2026-10-19',end:'2026-10-25',status:'partially_verified',formal:false,complete:false,amount_reconciliation_passed:true,department_coverage_complete:false,
+ generated_at:'2026-10-27T14:00:00+08:00',confirmed:{status:'partially_verified',complete:false,orderProductSales:863924.07,salesNetProfit:101289.72,adjusted_sales_cny:777531.663,adjusted_net_profit_cny:86096.262,adjusted_net_margin:86096.262/777531.663},
+ department_confirmed_unassigned:{records:22,metrics:{orderProductSales:5077.83,salesNetProfit:898.17}},
+ pending:{records:344,financially_nonzero_records:224,raw_sales:98466.78,raw_net_profit:23239.58},
+ reconciliation_difference:{raw_net_profit_delta:-.09,compatible_with_two_decimal_rounding:true,components:[]},reference_week:p};
+evaluate('renderWeeklyObservation();periodCoverage(D.groups)');
+assert.equal(inputs.weeklyObservation.hidden,false);assert(inputs.weeklyObservation.innerHTML.includes('777,531.66'));assert(inputs.weeklyObservation.innerHTML.includes('86,096.26'));
+assert(inputs.weeklyObservation.innerHTML.includes('非正式完整业绩'));assert(inputs.weeklyObservation.innerHTML.includes('不能全部加回四组'));assert(inputs.weeklyObservation.innerHTML.includes('尚未获ERP确认'));
+assert(inputs.weeklyObservation.innerHTML.includes('2026-10-12 — 2026-10-18'));assert(inputs.periodCoverage.textContent.includes('部门覆盖校验未通过'));
+assert.equal(evaluate("completeMetrics(W.observation_snapshot.confirmed,W.observation_snapshot)"),false);
+assert.equal(evaluate("totals(D.groups,$('period').value).orderProductSales==null"),true);
+assert.equal(evaluate("D.groups.every(g=>!g.periods.some(p=>p.end==='2026-10-25'))"),true);
+inputs.manager.value=summary.groups[0].manager;evaluate('renderWeeklyObservation()');assert.equal(inputs.weeklyObservation.hidden,true);
+inputs.manager.value='all';inputs.site.value='US';evaluate('renderWeeklyObservation()');assert.equal(inputs.weeklyObservation.hidden,true);inputs.site.value='all';
+inputs.period.value='month_2026-10-01_2026-10-26_CNY';evaluate('renderWeeklyObservation()');assert.equal(inputs.weeklyObservation.hidden,true);
+assert.equal(evaluate("totals(D.groups,$('period').value).orderProductSales"),summary.groups.length*90);
+inputs.period.value='week_2026-10-19_2026-10-25_CNY';
 evaluate("tab='price';renderWeeklyDifferences()");assert.equal(differenceBox.hidden,true);
+evaluate('renderWeeklyObservation()');assert.equal(inputs.weeklyObservation.hidden,true);
 console.log('Shared weeks: incomplete latest hidden, previous retained, independent pricing, daily MTD once-only amounts and missing country/volume fields passed.');

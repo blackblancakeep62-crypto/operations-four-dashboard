@@ -56,6 +56,20 @@ footer>.basis-notes{max-width:75%;margin:0}
 }
 
 /* The guide occupies the spare side gutter; compact screens keep the full data width. */
+.weekly-observation{border:1px solid #cbb47c;background:#fffdf7}
+.weekly-observation[hidden]{display:none}
+.observation-label{color:#73551c;font-weight:700}
+.observation-state{color:#73551c;font-size:12px;line-height:1.7}
+.observation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.observation-grid article{min-width:0;border:1px solid #e8e0cf;border-radius:8px;padding:16px;background:#fff}
+.observation-grid h3{font-size:13px;line-height:1.7;margin:0 0 12px}
+.observation-grid dl{margin:0}
+.observation-grid dl>div{display:flex;justify-content:space-between;gap:12px;padding:7px 0}
+.observation-grid dt{font-size:12px;color:#526579}
+.observation-grid dd{font-weight:700;margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.observation-grid p,.weekly-observation details{font-size:12px;line-height:1.8;color:#526579;overflow-wrap:anywhere}
+.observation-limit{font-size:12px;line-height:1.8;font-weight:600;color:#73551c}
+@media(max-width:1000px){.observation-grid{grid-template-columns:1fr}.weekly-observation .panelhead{flex-wrap:wrap}}
 :root{--nav-height:64px;--guide-top:80px;--guide-offset:126px}
 #metrics,#departmentGoals,#personalGoals,#trendPanel,#cardsPanel,#alertsPanel{scroll-margin-top:var(--guide-offset)}
 #pageGuide{position:sticky;top:var(--nav-height);z-index:90;width:calc(100% - 64px);max-width:1320px;margin:12px auto 0;background:#f8fafc;border:1px solid var(--line);border-radius:8px;color:var(--ink)}

@@ -206,4 +206,26 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaises(p.PublicationError):p.assert_no_regression('targets',target('2026-10-22'),target(),True)
         p.assert_no_regression('targets',target('2026-10-22'),target(),True,'Explicit isolated test')
 
+class ObservationValidationTests(unittest.TestCase):
+    def candidate(self):
+        d=shared_weekly();d['requested_cutoff']='2026-10-25'
+        d['observation_snapshot']={'schema':'weekly-observation-v1','status':'partially_verified','start':'2026-10-19','end':'2026-10-25',
+            'formal':False,'complete':False,'department_coverage_complete':False,'amount_reconciliation_passed':True,
+            'eligibility':{k:False for k in ('formal_department_targets','personal_performance','automatic_business_conclusions','replace_last_complete_week')},
+            'confirmed':{'orderProductSales':100.,'salesNetProfit':10.,'adjusted_sales_cny':90.,'adjusted_net_profit_cny':8.5,'status':'partially_verified','complete':False}}
+        return d
+    def test_observation_is_accepted_without_advancing_formal_cutoff(self):
+        d=self.candidate();p.validate_pair('weekly_business',pair('weekly_business',d))
+        self.assertEqual(d['weekly_cutoff'],'2026-10-18')
+    def test_observation_cannot_be_used_for_formal_metrics_or_targets(self):
+        d=self.candidate();d['observation_snapshot']['eligibility']['personal_performance']=True
+        with self.assertRaisesRegex(p.PublicationError,'unsafe_weekly_observation_use'):p.versions('weekly_business',d)
+        d=self.candidate();d['department_periods']=[{'start':'2026-10-19','end':'2026-10-25','complete':True,'metrics':d['observation_snapshot']['confirmed']}]
+        with self.assertRaisesRegex(p.PublicationError,'observation_in_formal_period'):p.versions('weekly_business',d)
+    def test_observation_rejects_double_adjustment_and_false_control(self):
+        d=self.candidate();d['observation_snapshot']['confirmed']['adjusted_sales_cny']=81.
+        with self.assertRaisesRegex(p.PublicationError,'double_weekly_observation_adjustment'):p.versions('weekly_business',d)
+        d=self.candidate();d['observation_snapshot']['amount_reconciliation_passed']=False
+        with self.assertRaisesRegex(p.PublicationError,'invalid_weekly_observation_state'):p.versions('weekly_business',d)
+
 if __name__=='__main__':unittest.main()
