@@ -104,9 +104,14 @@ def read_workbook(data, config):
     try:
         ex,q = w[config['sheet']],w[config['queue_sheet']]
         if [ex.cell(7,i+1).value for i in range(24)] != HEADERS: raise ValueError('execution_schema_changed')
-        if [q.cell(7,i).value for i in (2,3,4,5,13,30)] != ['站点','父ASIN','子ASIN','执行MSKU','候选资格','已核现价原币']: raise ValueError('queue_schema_changed')
+        extra = 1 if q.cell(7,4).value == '父单名' else 0
+        if [q.cell(7,i+(extra if i>=4 else 0)).value for i in (2,3,4,5,13,30)] != ['站点','父ASIN','子ASIN','执行MSKU','候选资格','已核现价原币']: raise ValueError('queue_schema_changed')
         rows = dedupe(ex.iter_rows(min_row=8,max_col=26,values_only=True))
-        queue = [list(r) for r in q.iter_rows(min_row=8,max_col=31,values_only=True) if r[1] and (r[3] or r[4])]
+        queue = []
+        for row in q.iter_rows(min_row=8,max_col=31+extra,values_only=True):
+            r = list(row)
+            if extra: del r[3]
+            if r[1] and (r[3] or r[4]): queue.append(r)
         asof = day(q.cell(3,2).value)
         if not asof: raise ValueError('queue_refresh_date_missing')
         return {'rows':rows,'queue':queue,'asof':str(asof)}

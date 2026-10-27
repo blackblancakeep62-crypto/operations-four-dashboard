@@ -36,6 +36,27 @@ def inputs(rows,qs=None):
 
 
 class ExecutionTests(unittest.TestCase):
+    def test_parent_name_column_preserves_canonical_input_and_states(self):
+        import io
+        from openpyxl import Workbook
+        config={'sheet':'02｜提价执行与复盘','queue_sheet':'01｜本周待提价清单'}
+        parsed=[]
+        for extra in (False,True):
+            w=Workbook();w.remove(w.active);ex=w.create_sheet(config['sheet']);q=w.create_sheet(config['queue_sheet'])
+            for j,h in enumerate(sync.HEADERS,1):ex.cell(7,j,h)
+            for j,v in enumerate(record(),1):ex.cell(8,j,v)
+            h=['field'+str(i) for i in range(31)]
+            for j,v in zip((2,3,4,5,13,30),('站点','父ASIN','子ASIN','执行MSKU','候选资格','已核现价原币')):h[j-1]=v
+            r=queue()
+            if extra:h.insert(3,'父单名');r.insert(3,'Existing explicit parent label')
+            for j,v in enumerate(h,1):q.cell(7,j,v)
+            for j,v in enumerate(r,1):q.cell(8,j,v)
+            q.cell(3,2,TODAY)
+            output=io.BytesIO();w.save(output)
+            parsed.append(sync.read_workbook(output.getvalue(),config))
+        self.assertEqual(parsed[0],parsed[1])
+        self.assertEqual(sync.summaries({'李漉':parsed[0]},TODAY),sync.summaries({'李漉':parsed[1]},TODAY))
+
     def metrics(self,rows,qs=None):
         return sync.summaries(inputs(rows,qs),TODAY)['李漉']['operational']
 
