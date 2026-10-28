@@ -57,6 +57,26 @@ def versions(module, data):
                     if abs(m[raw]*factor-m[adjusted])>1e-6:raise PublicationError('double_weekly_adjustment')
                 if m['adjusted_sales_cny'] and abs(m['adjusted_net_margin']-m['adjusted_net_profit_cny']/m['adjusted_sales_cny'])>1e-9:
                     raise PublicationError('invalid_shared_weekly_margin')
+        display=data.get('weekly_display')
+        if display is not None:
+            if display.get('schema')!='shared-weekly-display-v1' or not isinstance(display.get('groups'),dict):raise PublicationError('invalid_weekly_display')
+            import math
+            from datetime import date
+            for owner,entry in [('all',display),*display['groups'].items()]:
+                result['display/'+owner]=entry;seen=set()
+                for p in entry.get('periods',[]):
+                    k=(p['start'],p['end'])
+                    if k in seen or date.fromisoformat(k[0]).weekday()!=0 or (date.fromisoformat(k[1])-date.fromisoformat(k[0])).days!=6:raise PublicationError('invalid_weekly_display_period')
+                    seen.add(k)
+                    if p.get('formal') is not False or p.get('source_kind') not in ('shared_full_week','legacy_published'):raise PublicationError('invalid_weekly_display_scope')
+                    if p['source_kind']=='shared_full_week' and not p.get('source_sha256'):raise PublicationError('missing_weekly_display_proof')
+                    for m in [p['metrics'],*p.get('sites',{}).values()]:
+                        if (m.get('source_start'),m.get('source_end'))!=k:raise PublicationError('weekly_display_metric_date_mismatch')
+                        for f in ('orderProductSales','salesNetProfit','adjusted_sales_cny','adjusted_net_profit_cny','adsSpend'):
+                            v=m.get(f)
+                            if v is not None and (not isinstance(v,(int,float)) or isinstance(v,bool) or not math.isfinite(v)):raise PublicationError('invalid_weekly_display_metric')
+                        for raw,adjusted,factor in [('orderProductSales','adjusted_sales_cny',.9),('salesNetProfit','adjusted_net_profit_cny',.85)]:
+                            if m.get(raw) is not None and m.get(adjusted) is not None and abs(m[raw]*factor-m[adjusted])>1e-6:raise PublicationError('double_weekly_display_adjustment')
         o=data.get('observation_snapshot')
         if o is not None:
             from datetime import date

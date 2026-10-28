@@ -7,6 +7,7 @@ window.SNAPSHOT_GUARD=(()=>{
     if(module==='weekly_business'){
       if(data?.schema!=='weekly-business-v1'||!data.groups||!Array.isArray(data.department_periods))throw Error('snapshot schema');
       out.root=data;for(const [n,g] of Object.entries(data.groups))out['group/'+n]=g;
+      if(data.weekly_display){out['display/all']=data.weekly_display;for(const [n,g] of Object.entries(data.weekly_display.groups||{}))out['display/'+n]=g;}
     }else if(module==='targets'){
       if(data?.schema_version!==1||!data.departments||!data.personal)throw Error('snapshot schema');
       for(const [p,e] of Object.entries(data.departments))if(e.actual)out['department/'+p]=e.actual;

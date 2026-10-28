@@ -228,4 +228,24 @@ class ObservationValidationTests(unittest.TestCase):
         d=self.candidate();d['observation_snapshot']['amount_reconciliation_passed']=False
         with self.assertRaisesRegex(p.PublicationError,'invalid_weekly_observation_state'):p.versions('weekly_business',d)
 
+class WeeklyDisplayValidationTests(unittest.TestCase):
+    def candidate(self):
+        d=shared_weekly();m={'source_start':'2026-10-19','source_end':'2026-10-25','orderProductSales':100.,'salesNetProfit':10.,'adjusted_sales_cny':90.,'adjusted_net_profit_cny':8.5,'adsSpend':5.}
+        period={'start':'2026-10-19','end':'2026-10-25','formal':False,'source_kind':'shared_full_week','source_sha256':'proof','metrics':m,'sites':{}}
+        entry={'periods':[period],'weekly_cutoff':'2026-10-25'}
+        d['weekly_display']={'schema':'shared-weekly-display-v1',**copy.deepcopy(entry),'groups':{'one':copy.deepcopy(entry),'two':copy.deepcopy(entry)}}
+        return d
+    def test_partial_person_display_is_independent_of_formal_periods(self):
+        d=self.candidate();p.validate_pair('weekly_business',pair('weekly_business',d));self.assertEqual(d['weekly_cutoff'],'2026-10-18')
+        d['weekly_display']['groups']['one']['periods'][0]['metrics']['adsSpend']=None
+        p.validate_pair('weekly_business',pair('weekly_business',d))
+    def test_member_display_cannot_regress_while_other_members_advance(self):
+        before=self.candidate();after=copy.deepcopy(before);after['weekly_display']['groups']['one']['weekly_cutoff']='2026-10-18'
+        with self.assertRaisesRegex(p.PublicationError,'older_shared_weekly_cutoff:display/one'):p.assert_no_regression('weekly_business',after,before)
+    def test_display_date_and_adjustment_are_checked(self):
+        d=self.candidate();d['weekly_display']['groups']['one']['periods'][0]['metrics']['adjusted_sales_cny']=81.
+        with self.assertRaisesRegex(p.PublicationError,'double_weekly_display_adjustment'):p.versions('weekly_business',d)
+        d=self.candidate();d['weekly_display']['groups']['one']['periods'][0]['metrics']['source_end']='2026-10-18'
+        with self.assertRaisesRegex(p.PublicationError,'weekly_display_metric_date_mismatch'):p.versions('weekly_business',d)
+
 if __name__=='__main__':unittest.main()
