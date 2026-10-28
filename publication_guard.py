@@ -20,12 +20,13 @@ MODULES = {
     'alerts': ('alerts.json', 'alerts-data.js', 'window.ALERTS_DATA='),
     'weekly': ('summary.json', 'summary-data.js', 'window.OPERATIONS_DATA='),
     'weekly_business': ('weekly-business.json', 'weekly-business-data.js', 'window.WEEKLY_BUSINESS_DATA='),
+    'price_effect_weekly': ('price-effect-weekly.json', 'price-effect-weekly-data.js', 'window.PRICE_EFFECT_WEEKLY='),
 }
 STATIC = ('.nojekyll','index.html','style.css','app.js','summary.json','summary-data.js',
           'targets.json','targets-data.js','targets.js','execution.json',
           'execution-data.js','execution-sync.js','snapshot-guard.js',
           'alerts.json','alerts-data.js','alerts.js','alerts.css',
-          'weekly-business.json','weekly-business-data.js')
+          'weekly-business.json','weekly-business-data.js','price-effect-weekly.json','price-effect-weekly-data.js','price-effect.js','price-effect.css')
 LIVE = 'https://blackblancakeep62-crypto.github.io/operations-four-dashboard/'
 
 class PublicationError(ValueError):
@@ -33,7 +34,11 @@ class PublicationError(ValueError):
 
 def versions(module, data):
     result = {}
-    if module == 'weekly_business':
+    if module == 'price_effect_weekly':
+        if data.get('schema')!='price-effect-weekly-v1' or not isinstance(data.get('parents'),list):raise PublicationError('invalid_price_effect_schema')
+        if not data.get('weekly_cutoff') or not data.get('generated_at'):raise PublicationError('missing_price_effect_timestamp')
+        result['root']=data
+    elif module == 'weekly_business':
         if data.get('schema')!='weekly-business-v1' or data.get('financial_basis')!={'sales_factor':.9,'profit_factor':.85,'basis':'adjusted_once_from_raw_erp'}:
             raise PublicationError('invalid_shared_weekly_basis')
         if not isinstance(data.get('groups'),dict) or not isinstance(data.get('department_periods'),list):
@@ -128,7 +133,7 @@ def instant(value):
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 def assert_no_regression(module, candidate, previous, allow_rollback=False, reason=''):
-    if module in ('alerts','weekly_business') and previous is None:
+    if module in ('alerts','weekly_business','price_effect_weekly') and previous is None:
         versions(module,candidate)
         return
     new, old = versions(module,candidate), versions(module,previous)
@@ -138,7 +143,10 @@ def assert_no_regression(module, candidate, previous, allow_rollback=False, reas
     for scope, before in old.items():
         after = new.get(scope)
         if after is None: raise PublicationError('missing_previous_scope:'+scope)
-        if module == 'weekly_business':
+        if module == 'price_effect_weekly':
+            if after['weekly_cutoff']<before['weekly_cutoff']:raise PublicationError('older_price_effect_week')
+            fields=('generated_at',)
+        elif module == 'weekly_business':
             if before.get('weekly_cutoff') and (not after.get('weekly_cutoff') or after['weekly_cutoff']<before['weekly_cutoff']):
                 raise PublicationError('older_shared_weekly_cutoff:'+scope)
             fields=('generated_at','last_success_at') if scope=='root' else ()
@@ -204,7 +212,7 @@ def publish_module(repo, module, payload=None, attempts=3, allow_rollback=False,
         git(repo,'fetch','origin','main')
         parent = text(repo,'rev-parse','origin/main')
         names=text(repo,'ls-tree','--name-only',parent).splitlines()
-        previous = (None if module=='weekly_business' and MODULES[module][0] not in names
+        previous = (None if module in ('weekly_business','price_effect_weekly') and MODULES[module][0] not in names
                     else validate_pair(module,committed_payload(repo,parent,module)))
         assert_no_regression(module,candidate,previous,allow_rollback,reason)
         with tempfile.TemporaryDirectory(prefix='dashboard-index-') as folder:
@@ -235,7 +243,7 @@ def load_live(module):
         with urllib.request.urlopen(request,timeout=30) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
-        if module not in ('alerts','weekly_business') or error.code != 404:raise
+        if module not in ('alerts','weekly_business','price_effect_weekly') or error.code != 404:raise
         # One-time onboarding only: the deployed manifest must prove this module
         # has never been packaged. Other HTTP/network failures stay fail-closed.
         with urllib.request.urlopen(LIVE+'publication.json?check='+uuid.uuid4().hex,timeout=30) as response:

@@ -39,6 +39,9 @@ def shared_weekly(cutoff='2026-10-18'):
             'weekly_cutoff':cutoff,'department_periods':[],'groups':{},
             'generated_at':'2026-10-27T11:00:00+08:00','last_success_at':'2026-10-27T11:00:00+08:00'}
 
+def price_weekly(cutoff='2026-10-18'):
+    return {'schema':'price-effect-weekly-v1','weekly_cutoff':cutoff,'generated_at':'2026-10-27T11:00:00+08:00','parents':[]}
+
 class PublicationTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.base=Path(self.tmp.name)
@@ -47,7 +50,7 @@ class PublicationTests(unittest.TestCase):
         self.clone(self.a)
         p.git(self.a,'checkout','-b','main')
         initial={**pair('weekly',weekly()),**pair('weekly_business',shared_weekly()),**pair('targets',target('2026-10-22','2026-10-23T10:00:00+08:00')),
-                 **pair('alerts',alerts()),
+                 **pair('alerts',alerts()),**pair('price_effect_weekly',price_weekly()),
                  **pair('execution',execution('2026-10-26T10:00:00+08:00'))}
         for name in p.STATIC:
             if name not in initial:initial[name]=b'preserve-'+name.encode()
@@ -172,7 +175,7 @@ class PublicationTests(unittest.TestCase):
         (self.a/'targets.json').write_bytes(b'old local build must never be packaged')
         output=self.base/'site'
         live={'weekly':weekly(),'targets':target('2026-10-22','2026-10-23T10:00:00+08:00'),
-              'alerts':alerts(),'weekly_business':shared_weekly(),
+              'alerts':alerts(),'weekly_business':shared_weekly(),'price_effect_weekly':price_weekly(),
               'execution':execution('2026-10-26T10:00:00+08:00')}
         manifest=p.prepare_site(self.a,output,live_reader=lambda module:live[module])
         self.assertEqual(manifest['source_commit'],result['commit'])
@@ -196,6 +199,14 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(set(p.text(self.b,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()),set(p.MODULES['weekly_business'][:2]))
         with self.assertRaisesRegex(p.PublicationError,'older_shared_weekly'):
             p.publish_module(self.a,'weekly_business',pair('weekly_business',shared_weekly()))
+
+    def test_price_weekly_isolated_and_never_regresses(self):
+        before={m:self.observed(m) for m in ('weekly','weekly_business','targets','execution','alerts')}
+        result=p.publish_module(self.b,'price_effect_weekly',pair('price_effect_weekly',price_weekly('2026-10-25')))
+        for module,data in before.items():self.assertEqual(self.observed(module),data)
+        self.assertEqual(set(p.text(self.b,'diff-tree','--no-commit-id','--name-only','-r',result['commit']).splitlines()),set(p.MODULES['price_effect_weekly'][:2]))
+        with self.assertRaisesRegex(p.PublicationError,'older_price_effect_week'):
+            p.publish_module(self.a,'price_effect_weekly',pair('price_effect_weekly',price_weekly()))
 
     def test_live_verification_failure_does_not_create_artifact(self):
         def unavailable(module):raise OSError('offline')

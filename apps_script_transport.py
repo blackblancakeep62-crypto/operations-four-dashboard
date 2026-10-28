@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from sync_execution import HEADERS, TZ, day, dedupe, summaries, write_outputs
+from sync_execution import HEADERS, TZ, day, dedupe, summaries, write_outputs, normalize_execution_headers
 
 
 def baseline_key(key):
@@ -66,22 +66,26 @@ def calculate(state,payload,baseline,config,now):
     inputs={}
     for source in config['sources']:
         manager,file_id=source['manager'],source['file_id'];group=groups.get(file_id,{})
-        if group.get('status')!='ok' or group.get('headers')!=HEADERS:raise ValueError('source_schema_changed')
+        if group.get('status')!='ok':raise ValueError('source_schema_changed')
         if not isinstance(group.get('rows'),list) or any(not isinstance(r,list) or len(r)!=24 for r in group['rows']):raise ValueError('invalid_execution_rows')
         cached=baseline[manager]
         # Reuse the accepted queue snapshot; daily scope reads execution sheet
         # only and does not recalculate or rescan the opportunity universe.
-        inputs[manager]={'rows':dedupe(group['rows']),'queue':cached['queue'],'asof':cached['asof']}
+        rows,pending=normalize_execution_headers(group.get('headers',[]),dedupe(group['rows']))
+        inputs[manager]={'rows':rows,'queue':cached['queue'],'asof':cached['asof'],'price_basis_pending':pending}
     measured=summaries(inputs,now.date())
+    from price_effects import execution_batches
+    batches=execution_batches(inputs,now.date())
     updated=copy.deepcopy(state)
     updated.update(schema='execution-sync-v1',status='ok',automation='apps_script_daily',interval_minutes=1440,daily_time='10:30',
-                   checked_at=now.isoformat(),last_success_at=now.isoformat(),data_asof=read_at.astimezone(TZ).isoformat())
+                   checked_at=now.isoformat(),last_success_at=now.isoformat(),data_asof=read_at.astimezone(TZ).isoformat(),last_sync_method='apps_script_daily')
+    updated['price_effect_events']=batches
     updated.setdefault('groups',{})
     for source in config['sources']:
         name=source['manager'];group=groups[source['file_id']]
         updated['groups'][name]={**measured[name],'status':'ok','last_success_at':now.isoformat(),
                                 'data_asof':read_at.astimezone(TZ).isoformat(),'source_modified_at':group['source_modified_at'],
-                                'queue_snapshot_asof':baseline[name]['asof']}
+                                'queue_snapshot_asof':baseline[name]['asof'],'price_basis_pending':inputs[name]['price_basis_pending']}
     updated.pop('error',None)
     return updated
 

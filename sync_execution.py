@@ -22,6 +22,23 @@ TERMINAL = {'已完成', '已回退', '已取消', '完成', '回退', '取消'}
 HEADERS = ['测试ID','站点','父ASIN','子ASIN','执行MSKU','来源候选ID','原价原币','建议价原币','实际测试价原币','币种','实际开始日期','实际结束日期','测试状态','观察结果','父单基期净毛利CNY','父单测试期净毛利CNY','可比对照确认','父单净毛利变化CNY','最终保留或回退结论','执行证据链接','负责人','登记来源','记录更新日','FX广告促销断货核验']
 XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
+def normalize_execution_headers(headers,rows):
+    """Accept observed label aliases; a current snapshot is not a proven old price."""
+    h=list(headers)
+    if len(h)!=len(HEADERS):raise ValueError('execution_schema_changed')
+    snapshot=h[6]=='现价原币（快照）'
+    if snapshot:h[6]=HEADERS[6]
+    if h[7]=='建议测试价原币':h[7]=HEADERS[7]
+    if h!=HEADERS:raise ValueError('execution_schema_changed')
+    out=[];pending=0
+    for row in rows:
+        r=list(row)
+        if snapshot:
+            if all(r[i] not in (None,'') for i in (0,1,2,3,4,8,10,19)) and numeric(r[8]) and day(r[10]):pending+=1
+            r[6]=None
+        out.append(r)
+    return out,pending
+
 
 def day(v):
     if isinstance(v, datetime): return v.date()
@@ -103,10 +120,10 @@ def read_workbook(data, config):
     w = load_workbook(io.BytesIO(data),read_only=True,data_only=True)
     try:
         ex,q = w[config['sheet']],w[config['queue_sheet']]
-        if [ex.cell(7,i+1).value for i in range(24)] != HEADERS: raise ValueError('execution_schema_changed')
+        execution_headers=[ex.cell(7,i+1).value for i in range(24)]
         extra = 1 if q.cell(7,4).value == '父单名' else 0
         if [q.cell(7,i+(extra if i>=4 else 0)).value for i in (2,3,4,5,13,30)] != ['站点','父ASIN','子ASIN','执行MSKU','候选资格','已核现价原币']: raise ValueError('queue_schema_changed')
-        rows = dedupe(ex.iter_rows(min_row=8,max_col=26,values_only=True))
+        rows,price_basis_pending=normalize_execution_headers(execution_headers,dedupe(ex.iter_rows(min_row=8,max_col=26,values_only=True)))
         queue = []
         for row in q.iter_rows(min_row=8,max_col=31+extra,values_only=True):
             r = list(row)
@@ -114,7 +131,7 @@ def read_workbook(data, config):
             if r[1] and (r[3] or r[4]): queue.append(r)
         asof = day(q.cell(3,2).value)
         if not asof: raise ValueError('queue_refresh_date_missing')
-        return {'rows':rows,'queue':queue,'asof':str(asof)}
+        return {'rows':rows,'queue':queue,'asof':str(asof),'price_basis_pending':price_basis_pending}
     finally: w.close()
 
 

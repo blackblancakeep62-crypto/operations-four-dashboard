@@ -1,0 +1,1 @@
+window.PRICE_EFFECT_WEEKLY={"schema":"price-effect-weekly-v1","generated_at":"2026-10-28T10:18:01.676037+08:00","weekly_cutoff":"2026-10-25","source_weeks_available":["2026-10-25"],"last_complete_week_expected":"2026-10-25","parents":[],"status":"ok","errors":{},"basis":"ERP周度全源按账号、国家和父ASIN汇总，销售×0.9、净利润×0.85；生效周过渡。","data_gap":"仅完整全源周可验证同父单全部子体；缺周、范围不明或未完成观察则待观察/待核验。"};
