@@ -26,7 +26,7 @@ STATIC = ('.nojekyll','index.html','style.css','app.js','summary.json','summary-
           'targets.json','targets-data.js','targets.js','execution.json',
           'execution-data.js','execution-sync.js','snapshot-guard.js',
           'alerts.json','alerts-data.js','alerts.js','alerts.css',
-          'weekly-business.json','weekly-business-data.js','price-effect-weekly.json','price-effect-weekly-data.js','price-effect.js','price-effect.css')
+          'weekly-business.json','weekly-business-data.js','price-effect-weekly.json','price-effect-weekly-data.js','price-effect.js','price-effect.css','partial-pricing-data.js','partial-pricing.js')
 LIVE = 'https://blackblancakeep62-crypto.github.io/operations-four-dashboard/'
 
 class PublicationError(ValueError):

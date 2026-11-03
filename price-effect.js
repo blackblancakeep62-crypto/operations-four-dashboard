@@ -99,7 +99,8 @@
    const ops=groups().map(op).filter(Boolean),children=new Set(rows.flatMap(b=>b.children.map(c=>b.site+'|'+c.child))).size;
    const active=new Set(rows.flatMap(b=>b.children.filter(c=>c.start<=period.end&&(!c.end||c.end>=period.end)&&['测试中','观察中','已启动','暂停','暂停复核'].includes(c.state)).map(c=>b.site+'|'+c.child))).size;
    const candidates=sum(ops.map(o=>({n:o.grades?.A!=null&&o.grades?.B!=null?o.grades.A+o.grades.B:null})),'n');
-   id('metrics').innerHTML=metric('A / B级机会SKU',num(candidates),'最新机会快照')+metric('待核验SKU',num(sum(ops,'pending_verification')),'最新机会快照')+metric('已核验待提价',num(sum(ops,'ready_count')),'最新机会快照')+metric('已执行提价子ASIN',num(children),'按当前筛选去重')+metric('测试中SKU',num(active),'执行表实际启动状态')+metric('可比较父单',num(comparable.length),'前后各两个完整周');
+   const dates=[...new Set(groups().map(g=>g.weekly_cutoff).filter(Boolean))],source=dates.length===1?`机会周截至 ${dates[0]}`:'机会周截止日期不一致';
+   id('metrics').innerHTML=metric('A / B级机会SKU',num(candidates),source)+metric('待核验SKU',num(sum(ops,'pending_verification')),source)+metric('已核验待提价',num(sum(ops,'ready_count')),source)+metric('已执行提价子ASIN',num(children),'按当前筛选去重')+metric('测试中SKU',num(active),'执行表实际启动状态')+metric('可比较父单',num(comparable.length),'前后各两个完整周');
   }else id('metrics').innerHTML=['A / B级机会SKU','待核验SKU','已核验待提价','已执行提价子ASIN','测试中SKU','可比较父单'].map(x=>metric(x,'—',filtered.historyMissing?'历史快照未保存':'等待同步')).join('');
   id('alertsTitle').textContent='03｜提价效果复盘';id('alertsDescription').textContent='按所选负责人、国家和周期汇总父单状态；实际利润变化不直接等同于提价因果收益。';
   const review=['有效候选','需关注','待观察','待核验','无效'];
