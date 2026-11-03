@@ -10,7 +10,10 @@ const weekly={schema:'weekly-business-v1',generated_at:'2026-10-28T10:00:00+08:0
 const targets={personal:{'2026-10':Object.fromEntries(names.map(n=>[n,{actual:{start:'2026-10-01',cutoff:'2026-10-27',basis:'adjusted_once_from_raw_erp',raw_sales:100,raw_net_profit:10,sales:90,net_profit:8.5,net_margin:8.5/90,raw_signed_ads:-5,ad_burden:.05}}]))}};
 const protectedSource=JSON.stringify(summary),protectedTargets=JSON.stringify(targets);
 const inputs={manager:{value:'all'},site:{value:'all'},period:{value:'week_2026-10-19_2026-10-25_CNY'},chart:{innerHTML:''},trendDate:{textContent:''},trendDescription:{textContent:''}};
-const ctx={window:{OPERATIONS_DATA:summary,WEEKLY_BUSINESS_DATA:weekly,OPERATIONS_TARGETS:targets,SNAPSHOT_GUARD:{restore:(_,s)=>s}},document:{getElementById:id=>inputs[id]},structuredClone,Intl,Date};
+// These immutable fixtures describe the week ending 2026-10-25. Freeze the
+// test clock to their recorded publication date so it stays valid in later months.
+class FixtureDate extends Date {constructor(...args){super(...(args.length?args:['2026-10-28T12:00:00+08:00']));}static now(){return Date.parse('2026-10-28T12:00:00+08:00');}}
+const ctx={window:{OPERATIONS_DATA:summary,WEEKLY_BUSINESS_DATA:weekly,OPERATIONS_TARGETS:targets,SNAPSHOT_GUARD:{restore:(_,s)=>s}},document:{getElementById:id=>inputs[id]},structuredClone,Intl,Date:FixtureDate};
 vm.createContext(ctx);vm.runInContext(app.slice(0,app.indexOf('options();for(const id')),ctx);const run=s=>vm.runInContext(s,ctx),id=inputs.period.value;
 assert.equal(run('totals(D.groups,$("period").value).orderProductSales'),918);
 assert.equal(run('confirmedCardMetrics().orderProductSales'),918);
