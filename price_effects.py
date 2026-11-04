@@ -12,19 +12,23 @@ def execution_batches(inputs,today):
         queue=data.get('queue',[]);snapshot=day(data.get('asof'))
         for r in data.get('rows',[]):
             if r[12] not in ACTIVE|{'已完成','已回退','完成','回退'}:continue
-            if not started(r,today) or not (numeric(r[6]) and numeric(r[8]) and r[8]>r[6]):continue
+            # An operator's dated actual-price registration remains visible
+            # while missing execution evidence prevents a verified result.
+            declared=all(r[i] not in (None,'') for i in (0,1,2,3,4,6,8,10)) and day(r[10]) and day(r[10])<=today
+            if not declared or not (numeric(r[6]) and numeric(r[8]) and r[8]>r[6]):continue
             site,parent,child=str(r[1]),str(r[2]),str(r[3]);start=day(r[10]);week=monday(start)
             key=(site,parent,week.isoformat());identity=(child,start.isoformat(),r[6],r[8])
             p=parents[key].setdefault(identity,{'child':child,'start':start.isoformat(),
               'original_price':r[6],'actual_price':r[8],'currency':r[9],
               'end':str(day(r[11])) if day(r[11]) else None,'state':r[12],'comparability_confirmed':r[16]=='是',
-              'interference_confirmed':r[23]=='通过','updated':str(day(r[22])) if day(r[22]) else None,
+              'interference_confirmed':r[23]=='通过','execution_evidence_confirmed':bool(r[19]),'updated':str(day(r[22])) if day(r[22]) else None,
               'owners':set(),'ownership_unconfirmed':False,'forecast_profit':None})
             owner_proved=bool(snapshot and any(len(q)>=5 and q[1:5]==r[1:5] for q in queue))
             if owner_proved:p['owners'].add(manager)
             else:p['ownership_unconfirmed']=True
             p['comparability_confirmed'] = p['comparability_confirmed'] and r[16]=='是'
             p['interference_confirmed'] = p['interference_confirmed'] and r[23]=='通过'
+            p['execution_evidence_confirmed'] = p['execution_evidence_confirmed'] and bool(r[19])
             if p['state']!=r[12] or p['end']!=(str(day(r[11])) if day(r[11]) else None):
                 p['state']='状态冲突待核验';p['interference_confirmed']=False
             candidates=[q for q in queue if len(q)>=31 and q[1]==r[1] and q[3]==r[3] and q[4]==r[4] and str(q[26])==str(r[5])]
@@ -62,6 +66,8 @@ def compare(batch,weekly,asof,other_batches=()):
            base[0]<=date.fromisoformat(b['batch_week'])<=end for b in other_batches):
         out.update(status='待核验',reason='多个提价批次在比较窗口内相互干扰');return out
     if end>asof:return out
+    if any(not c.get('execution_evidence_confirmed',False) for c in batch['children']):
+        out.update(status='待核验',reason='人工登记已执行，缺少实际执行凭证');return out
     if any(c['end'] and date.fromisoformat(c['end'])<end for c in batch['children']):
         out.update(status='待核验',reason='测试在观察期内结束或回退');return out
     periods=[]

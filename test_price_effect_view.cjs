@@ -20,4 +20,6 @@ assert.equal(currentJudge(comparable,confirmed).status,'需关注');
 assert.equal(currentJudge({...comparable,profit_delta:-1,after:{asp:12,margin:.08}},confirmed).status,'无效');
 assert.equal(currentJudge({...comparable,status:'待核验',reason:'部分执行报表读取失败'},confirmed).status,'待核验');
 assert.equal(currentJudge(comparable,{children:[{comparability_confirmed:false,interference_confirmed:true}]}).status,'待核验');
+const unproved=currentJudge(comparable,{children:[{comparability_confirmed:true,interference_confirmed:true,execution_evidence_confirmed:false}]});
+assert.equal(unproved.status,'待核验');assert.equal(unproved.profit_delta,null);
 console.log('pricing effect view checks passed');

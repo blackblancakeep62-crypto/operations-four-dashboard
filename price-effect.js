@@ -14,6 +14,7 @@
  function currentJudge(e,b){
   if(!e.before||!e.after)return e;
   if(e.status==='待核验'&&!String(e.reason||'').startsWith('需确认对照'))return e;
+  if(b.children.some(c=>c.execution_evidence_confirmed===false))return {...e,status:'待核验',reason:'人工登记已执行，执行凭证待核',before:null,after:null,profit_delta:null,sales_delta:null,units_change:null};
   if(b.children.some(c=>c.end&&c.end<e.observation_end))return {...e,status:'待核验',reason:'测试在观察期内结束或回退'};
   if(b.children.some(c=>!c.comparability_confirmed||!c.interference_confirmed))return {...e,status:'待核验',reason:'需确认对照及汇率、广告、促销、断货干扰'};
   const a=e.before,z=e.after;
@@ -88,7 +89,7 @@
   const count=filtered.historyMissing||unavailable?null:rows.length;
   const comparable=rows.filter(x=>['无效','需关注','有效候选'].includes(x.effect.status));
   const measure=(label,value)=>`<div>${label}<strong>${value==null?'—':num(value)}</strong></div>`;
-  id('parentEffectSummary').innerHTML=measure('已确认提价父单',count)+measure('可比较父单',count==null?null:comparable.length)+measure('净利润增长',count==null?null:comparable.filter(x=>x.effect.profit_delta>0).length)+measure('净利润下降',count==null?null:comparable.filter(x=>x.effect.profit_delta<0).length);
+  id('parentEffectSummary').innerHTML=measure('登记执行父单',count)+measure('可比较父单',count==null?null:comparable.length)+measure('净利润增长',count==null?null:comparable.filter(x=>x.effect.profit_delta>0).length)+measure('净利润下降',count==null?null:comparable.filter(x=>x.effect.profit_delta<0).length);
   const basisPending=groups().reduce((n,g)=>n+(state.groups?.[g.manager]?.price_basis_pending||0),0);
   const gap=filtered.historyMissing?'该历史周期没有保存可追溯的执行快照，当前快照不冒充历史数据。':unavailable?'执行明细正在等待下一次成功同步，当前父单数暂不可确认。':`本次已核验 ${data?.source_weeks_available?.length??0} 个周度全源；缺少前后各两周、父子归属不完整或存在干扰时标记待观察/待核验。`;
   id('parentEffectGap').textContent=gap+(basisPending?` 有 ${basisPending} 条记录的提价前价格依据待核验。`:'')+(fetchFailed?' 周度快照读取失败，保留上次有效数据。':'')+' 父单利润变化是实际经营变化，不能直接证明提价带来的因果收益。';
@@ -100,8 +101,8 @@
    const active=new Set(rows.flatMap(b=>b.children.filter(c=>c.start<=period.end&&(!c.end||c.end>=period.end)&&['测试中','观察中','已启动','暂停','暂停复核'].includes(c.state)).map(c=>b.site+'|'+c.child))).size;
    const candidates=sum(ops.map(o=>({n:o.grades?.A!=null&&o.grades?.B!=null?o.grades.A+o.grades.B:null})),'n');
    const dates=[...new Set(groups().map(g=>g.pricing_weekly_cutoff||g.weekly_cutoff).filter(Boolean))],source=dates.length===1?`机会周截至 ${dates[0]}`:'机会周截止日期不一致';
-   id('metrics').innerHTML=metric('A / B级机会SKU',num(candidates),source)+metric('待核验SKU',num(sum(ops,'pending_verification')),source)+metric('已核验待提价',num(sum(ops,'ready_count')),source)+metric('已执行提价子ASIN',num(children),'按当前筛选去重')+metric('测试中SKU',num(active),'执行表实际启动状态')+metric('可比较父单',num(comparable.length),'前后各两个完整周');
-  }else id('metrics').innerHTML=['A / B级机会SKU','待核验SKU','已核验待提价','已执行提价子ASIN','测试中SKU','可比较父单'].map(x=>metric(x,'—',filtered.historyMissing?'历史快照未保存':'等待同步')).join('');
+   id('metrics').innerHTML=metric('A / B级机会SKU',num(candidates),source)+metric('待核验SKU',num(sum(ops,'pending_verification')),source)+metric('已核验待提价',num(sum(ops,'ready_count')),source)+metric('登记执行子ASIN',num(children),'人工登记，缺执行凭证时待核')+metric('登记测试中SKU',num(active),'人工登记状态，凭证待核')+metric('可比较父单',num(comparable.length),'前后各两个完整周');
+  }else id('metrics').innerHTML=['A / B级机会SKU','待核验SKU','已核验待提价','登记执行子ASIN','登记测试中SKU','可比较父单'].map(x=>metric(x,'—',filtered.historyMissing?'历史快照未保存':'等待同步')).join('');
   id('alertsTitle').textContent='03｜提价效果复盘';id('alertsDescription').textContent='按所选负责人、国家和周期汇总父单状态；实际利润变化不直接等同于提价因果收益。';
   const review=['有效候选','需关注','待观察','待核验','无效'];
   id('alerts').innerHTML=filtered.historyMissing||unavailable?'<div class="empty">暂无可追溯的执行快照</div>':`<div class="price-review-counts">${review.map(s=>`<span>${s} <strong>${rows.filter(b=>b.effect.status===s).length}</strong></span>`).join('')}</div>`+(rows.length?rows.map(b=>`<div class="alert"><strong>${esc(b.name||'父单名待补')}</strong><span>${esc(b.parent)} · ${esc(b.effect.status)}：${esc(action(b.effect.status))}</span></div>`).join(''):'<div class="empty">当前范围暂无符合证据条件的实际提价记录。</div>');
@@ -112,7 +113,9 @@
   id('parentEffectRows').innerHTML=visible.length?visible.map((b,i)=>{
    const e=b.effect,a=e.before,z=e.after,index=page*20+i,countryCode=OperatingCountries.parse(b.site)?.country||'待核验',countryName=OperatingCountries.names[countryCode]||countryCode;
    const childCount=new Set(b.children.map(c=>c.child)).size;
-   const line=`<tr data-effect-row="${index}" tabindex="0"><td>${esc(b.owners.join('、')||'待核验')}</td><td>${esc(countryName)}<small> ${esc(b.site)}</small></td><td><button type="button" data-effect-row="${index}" aria-expanded="${expanded===index}">${expanded===index?'收起':'展开'}</button> ${esc(b.name||'待补')}</td><td>${esc(b.parent)}</td><td>${childCount}</td><td>${signed(b.forecast_profit)}</td><td class="profit-change ${e.profit_delta<0?'negative':''}">${signed(e.profit_delta)}</td><td>${beforeAfter(a?.margin,z?.margin,rate)}</td><td>${beforeAfter(a?.asp,z?.asp,money)}</td><td>${rate(e.units_change)}</td><td>${signed(e.sales_delta)}</td><td>${esc(e.status||'待观察')}</td></tr>`;
+   const missingEvidence=b.children.some(c=>c.execution_evidence_confirmed===false);
+   const resultLabel=missingEvidence?`已执行·${e.status==='待观察'?'待观察':'待核验'}（人工登记，凭证待核）`:(e.status||'待观察');
+   const line=`<tr data-effect-row="${index}" tabindex="0"><td>${esc(b.owners.join('、')||'待核验')}</td><td>${esc(countryName)}<small> ${esc(b.site)}</small></td><td><button type="button" data-effect-row="${index}" aria-expanded="${expanded===index}">${expanded===index?'收起':'展开'}</button> ${esc(b.name||'待补')}</td><td>${esc(b.parent)}</td><td>${childCount}</td><td>${signed(b.forecast_profit)}</td><td class="profit-change ${e.profit_delta<0?'negative':''}">${signed(e.profit_delta)}</td><td>${beforeAfter(a?.margin,z?.margin,rate)}</td><td>${beforeAfter(a?.asp,z?.asp,money)}</td><td>${rate(e.units_change)}</td><td>${signed(e.sales_delta)}</td><td>${esc(resultLabel)}</td></tr>`;
    if(expanded!==index)return line;
    const children=b.children.map(c=>`${esc(c.child)}：${esc(c.currency||'')} ${num(c.original_price,2)} → ${num(c.actual_price,2)}（${pct((c.actual_price-c.original_price)/c.original_price)}），生效 ${esc(c.start)}`).join('<br>');
    const detail=`<tr class="effect-detail"><td colspan="12"><strong>实际提价子体</strong><br>${children}<br><strong>比较周期：</strong>${esc(e.base_start||'待同步')} — ${esc(e.base_end||'—')}；观察 ${esc(e.observation_start||'待同步')} — ${esc(e.observation_end||'—')}（生效周为过渡）。<br><strong>前 → 后：</strong>销售额 ${beforeAfter(a?.sales,z?.sales,money)}；销量 ${beforeAfter(a?.units,z?.units,num)}；净利润 ${beforeAfter(a?.profit,z?.profit,money)}；利润率 ${beforeAfter(a?.margin,z?.margin,rate)}；ASP ${beforeAfter(a?.asp,z?.asp,money)}。<br>预计销售额增量：—（未记录事前依据）；实际销售额变化：${signed(e.sales_delta)}；实际与预计利润差：${finite(e.profit_delta)&&finite(b.forecast_profit)?signed(e.profit_delta-b.forecast_profit):'—'}。<br><strong>判断：</strong>${esc(e.reason||'待观察')}；${esc(action(e.status))}。</td></tr>`;

@@ -28,6 +28,12 @@ class PriceEffectsTest(unittest.TestCase):
     def test_nonstarted_not_a_price_increase(self):
         entries=[row(state='填写中'),row('C2',state='待核验'),row('C3')];entries[2][8]=10
         self.assertEqual(execution_batches({'李漉':{'rows':entries,'queue':[]}},self.today),[])
+    def test_recorded_execution_remains_visible_without_evidence(self):
+        r=row(start='2026-10-27',state='测试中');r[19]=None
+        batches=execution_batches({'李漉':input_for([r])},date(2026,11,3))
+        self.assertEqual(len(batches),1);self.assertFalse(batches[0]['children'][0]['execution_evidence_confirmed'])
+        self.assertEqual(compare(batches[0],{},date(2026,11,3),batches)['status'],'待观察')
+        self.assertEqual(compare(batches[0],{},date(2026,11,30),batches)['status'],'待核验')
     def test_adjusted_parent_profit_and_asp_once(self):
         e=compare(self.b,self.weeks,self.today,self.batches)
         self.assertEqual(e['status'],'有效候选');self.assertAlmostEqual(e['before']['sales'],180);self.assertAlmostEqual(e['before']['profit'],17)
